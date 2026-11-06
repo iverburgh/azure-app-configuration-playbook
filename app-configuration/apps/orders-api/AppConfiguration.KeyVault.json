@@ -1,0 +1,8 @@
+{
+  "Payments": {
+    "ApiKey": { "uri": "#{KeyVaultUri}#/secrets/payments-api-key" }
+  },
+  "Smtp": {
+    "Password": { "uri": "#{KeyVaultUri}#/secrets/smtp-password" }
+  }
+}

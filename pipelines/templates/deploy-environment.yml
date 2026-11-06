@@ -1,0 +1,170 @@
+# Deploys one app and its configuration set to one environment, as a deployment job on the Azure
+# DevOps environment <app>-<environment>. Put the approval check on that environment.
+#
+# The label of the configuration set is the build number. The runOnce hooks run as separate jobs,
+# in this order:
+#
+#   deploy            import the set under the label, point the staging slot at it, start the
+#                     staging slot, deploy the package to it: the new code starts with its own set
+#   routeTraffic      swap staging into production (after the warm-up); the label moves with the
+#                     swap
+#   postRouteTraffic  smoke test production
+#   on: failure       swap back when production runs this deployment: production returns to the
+#                     previous application and, with it, the previous configuration set
+#   on: success       remove configuration sets that are neither live nor the rollback target
+#
+# Every hook that runs a script downloads the scripts artifact itself: only the deploy hook
+# downloads artifacts automatically, and it is told exactly which ones it needs.
+
+parameters:
+- name: appName
+  type: string
+- name: environment
+  type: object # name, serviceConnection, storeName, resourceGroup, webAppName
+- name: healthCheckPath
+  type: string
+  default: /health
+- name: appType
+  type: string
+  default: webAppLinux
+  values: [webApp, webAppLinux]
+- name: stopStagingWhenDone
+  displayName: Stop the staging slot after the deployment, so the previous version stops running
+  type: boolean
+  default: true
+
+jobs:
+- deployment: Deploy
+  displayName: Deploy ${{ parameters.appName }} to ${{ parameters.environment.name }}
+  environment: ${{ parameters.appName }}-${{ parameters.environment.name }}
+  variables:
+    label: $(Build.BuildNumber)
+    storeEndpoint: https://${{ parameters.environment.storeName }}.azconfig.io
+    scriptsPath: $(Pipeline.Workspace)/appconfig-scripts
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+        - download: current
+          artifact: appconfig-scripts
+        - download: current
+          artifact: appconfig-${{ parameters.environment.name }}
+        - download: current
+          artifact: app
+
+        - template: import-configuration.yml
+          parameters:
+            serviceConnection: ${{ parameters.environment.serviceConnection }}
+            storeEndpoint: $(storeEndpoint)
+            path: $(Pipeline.Workspace)/appconfig-${{ parameters.environment.name }}/${{ parameters.appName }}
+            label: $(label)
+            scriptsPath: $(scriptsPath)
+
+        - template: activate-configuration.yml
+          parameters:
+            serviceConnection: ${{ parameters.environment.serviceConnection }}
+            storeEndpoint: $(storeEndpoint)
+            resourceGroup: ${{ parameters.environment.resourceGroup }}
+            webAppName: ${{ parameters.environment.webAppName }}
+            appName: ${{ parameters.appName }}
+            label: $(label)
+            healthCheckPath: ${{ parameters.healthCheckPath }}
+            scriptsPath: $(scriptsPath)
+            include: point
+
+        - task: AzureCLI@2
+          displayName: Start the staging slot
+          inputs:
+            azureSubscription: ${{ parameters.environment.serviceConnection }}
+            scriptType: pscore
+            scriptLocation: inlineScript
+            inlineScript: >-
+              az webapp start --resource-group '${{ parameters.environment.resourceGroup }}'
+              --name '${{ parameters.environment.webAppName }}' --slot staging
+
+        - task: AzureWebApp@1
+          displayName: Deploy the application to the staging slot
+          inputs:
+            azureSubscription: ${{ parameters.environment.serviceConnection }}
+            appType: ${{ parameters.appType }}
+            appName: ${{ parameters.environment.webAppName }}
+            deployToSlotOrASE: true
+            resourceGroupName: ${{ parameters.environment.resourceGroup }}
+            slotName: staging
+            package: $(Pipeline.Workspace)/app
+
+      routeTraffic:
+        steps:
+        - download: current
+          artifact: appconfig-scripts
+
+        - template: activate-configuration.yml
+          parameters:
+            serviceConnection: ${{ parameters.environment.serviceConnection }}
+            storeEndpoint: $(storeEndpoint)
+            resourceGroup: ${{ parameters.environment.resourceGroup }}
+            webAppName: ${{ parameters.environment.webAppName }}
+            appName: ${{ parameters.appName }}
+            label: $(label)
+            scriptsPath: $(scriptsPath)
+            include: swap
+
+      postRouteTraffic:
+        steps:
+        - download: none
+
+        - task: AzureCLI@2
+          displayName: Smoke test production
+          inputs:
+            azureSubscription: ${{ parameters.environment.serviceConnection }}
+            scriptType: pscore
+            scriptLocation: inlineScript
+            inlineScript: |
+              $hostName = az webapp show --resource-group '${{ parameters.environment.resourceGroup }}' `
+                  --name '${{ parameters.environment.webAppName }}' --query defaultHostName --output tsv
+              $url = "https://$hostName${{ parameters.healthCheckPath }}"
+              foreach ($attempt in 1..10) {
+                  try {
+                      Invoke-WebRequest -Uri $url -TimeoutSec 30 | Out-Null
+                      Write-Host "Healthy: $url"
+                      exit 0
+                  }
+                  catch {
+                      Write-Host "Attempt ${attempt}: $($_.Exception.Message)"
+                      Start-Sleep -Seconds 15
+                  }
+              }
+              throw "Production is not healthy: $url"
+
+      on:
+        failure:
+          steps:
+          - download: current
+            artifact: appconfig-scripts
+
+          - template: rollback-configuration.yml
+            parameters:
+              serviceConnection: ${{ parameters.environment.serviceConnection }}
+              storeEndpoint: $(storeEndpoint)
+              resourceGroup: ${{ parameters.environment.resourceGroup }}
+              webAppName: ${{ parameters.environment.webAppName }}
+              appName: ${{ parameters.appName }}
+              label: $(label)
+              stopStagingWhenDone: ${{ parameters.stopStagingWhenDone }}
+              scriptsPath: $(scriptsPath)
+
+        success:
+          steps:
+          - download: current
+            artifact: appconfig-scripts
+
+          - template: cleanup-configuration.yml
+            parameters:
+              serviceConnection: ${{ parameters.environment.serviceConnection }}
+              storeEndpoint: $(storeEndpoint)
+              resourceGroup: ${{ parameters.environment.resourceGroup }}
+              webAppName: ${{ parameters.environment.webAppName }}
+              appName: ${{ parameters.appName }}
+              label: $(label)
+              stopStagingWhenDone: ${{ parameters.stopStagingWhenDone }}
+              scriptsPath: $(scriptsPath)

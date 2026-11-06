@@ -1,0 +1,9 @@
+{
+  "variables": {
+    "EnvironmentName": "prod",
+    "LogLevel": "Warning",
+    "PaymentsBaseUrl": "https://payments.example.com/api/",
+    "PaymentsTimeoutSeconds": 10,
+    "ExpressShippingPercentage": 10
+  }
+}

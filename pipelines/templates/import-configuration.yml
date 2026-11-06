@@ -1,0 +1,33 @@
+# Imports one resolved configuration set into App Configuration under a deployment label.
+#
+# Settings and Key Vault references are written under '<app>:' with the label; feature flags and
+# circuit breakers keep the enabled state they have in the store. Only differences are written,
+# and the sentinel last, so rerunning a deployment changes nothing. Files that still contain a
+# #{Token}# are rejected.
+#
+# Needs App Configuration Data Owner on the store.
+
+parameters:
+- name: serviceConnection
+  type: string
+- name: storeEndpoint
+  type: string
+- name: path # folder with the resolved files of one app
+  type: string
+- name: label
+  type: string
+- name: scriptsPath
+  type: string
+
+steps:
+- task: AzureCLI@2
+  displayName: Import configuration set ${{ parameters.label }}
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    scriptType: pscore
+    scriptLocation: scriptPath
+    scriptPath: ${{ parameters.scriptsPath }}/Import-AppConfiguration.ps1
+    arguments: >-
+      -StoreEndpoint '${{ parameters.storeEndpoint }}'
+      -Path '${{ parameters.path }}'
+      -Label '${{ parameters.label }}'

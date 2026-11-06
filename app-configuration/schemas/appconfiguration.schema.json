@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appconfiguration.schema.json",
+  "title": "Application settings",
+  "description": "Nested settings for one application. Keys are flattened with ':' when imported, so keys may not contain ':'. Values may contain #{Token}# placeholders. Deeper levels follow the same rules (no null values, no ':' in keys); the validation script checks those, because PowerShell's Test-Json does not support recursive schemas.",
+  "type": "object",
+  "propertyNames": {
+    "type": "string",
+    "minLength": 1,
+    "pattern": "^[^:]+$"
+  },
+  "additionalProperties": {
+    "type": [ "string", "number", "boolean", "array", "object" ]
+  }
+}

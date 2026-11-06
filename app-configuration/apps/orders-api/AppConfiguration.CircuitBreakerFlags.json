@@ -1,0 +1,10 @@
+[
+  {
+    "name": "PaymentProvider",
+    "description": "Turn off to stop calling the payment provider while it is down."
+  },
+  {
+    "name": "OrderEmails",
+    "description": "Turn off to stop sending order e-mails."
+  }
+]

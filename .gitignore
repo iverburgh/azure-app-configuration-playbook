@@ -1,0 +1,7 @@
+*.log
+TestResults/
+# Resolved configuration written by Build-AppConfiguration.ps1 when you run it locally.
+out/
+# Organisation-specific terms for the leak check. Never commit this file: it would publish exactly
+# the names it keeps out.
+tools/forbidden-terms.local.txt

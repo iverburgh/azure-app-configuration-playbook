@@ -1,0 +1,6 @@
+{
+  "variables": {
+    "EnvironmentName": "test",
+    "ExpressShippingPercentage": 50
+  }
+}

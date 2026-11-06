@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "variables.schema.json",
+  "title": "Deployment variables",
+  "description": "Values for #{Token}# placeholders. common.json holds defaults; <environment>.json overrides them. A value may reference other variables.",
+  "type": "object",
+  "properties": {
+    "variables": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$"
+      },
+      "additionalProperties": {
+        "type": [ "string", "number", "boolean" ]
+      }
+    }
+  },
+  "required": [ "variables" ],
+  "additionalProperties": false
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "featureflags.schema.json",
+  "title": "Feature flags or circuit breakers",
+  "description": "A list of flags. 'enabled' is only used when the flag does not exist in the store yet; afterwards the state in the store wins.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Za-z0-9]{0,99}$"
+      },
+      "description": { "type": "string" },
+      "enabled": { "type": "boolean" },
+      "conditions": {
+        "type": "object",
+        "properties": {
+          "requirement_type": { "enum": [ "Any", "All" ] },
+          "client_filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "parameters": { "type": "object" }
+              },
+              "required": [ "name" ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": [ "name" ],
+    "additionalProperties": false
+  }
+}

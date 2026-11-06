@@ -1,0 +1,103 @@
+# Deploys orders-api together with its App Configuration set, one environment after the other.
+#
+# Validate  runs the tests and the offline check of every app and environment. No Azure access.
+#           Attach this pipeline as build validation on main (path filter /app-configuration/*);
+#           pull request runs stop after Validate.
+# Build     resolves the configuration once per environment into an artifact, publishes the
+#           scripts that deploy it, and builds the application package. Every later stage uses
+#           these artifacts, so what was validated is exactly what gets deployed.
+# Deploy_*  one stage per environment, in the order of the list below. Each runs a deployment job
+#           on the Azure DevOps environment orders-api-<environment>; add an approval check to it.
+#           See templates/deploy-environment.yml for the steps and the rollback.
+#
+# Prerequisites (docs/ci-cd-pipeline.md and docs/permissions.md):
+#   - per environment an Azure Resource Manager service connection that uses workload identity
+#     federation, named in the list below
+#   - its identity: App Configuration Data Owner on the store, Website Contributor on the web app
+#   - Azure DevOps environments named orders-api-<environment>, with an approval check
+#   - per environment a web app with a staging slot and a managed identity that can read the
+#     store and the key vault
+#
+# Environment names become stage names, so use letters, digits and underscores only.
+
+# The build number is the deployment label: it names the configuration set in the store.
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+    - app-configuration/*
+    - pipelines/*
+    # - src/*   the source of your application
+
+parameters:
+- name: environments
+  displayName: Environments, deployed in this order
+  type: object
+  default:
+  - name: dev
+    serviceConnection: sc-orders-dev
+    storeName: appcs-orders-dev
+    resourceGroup: rg-orders-dev
+    webAppName: app-orders-dev
+  - name: test
+    serviceConnection: sc-orders-test
+    storeName: appcs-orders-test
+    resourceGroup: rg-orders-test
+    webAppName: app-orders-test
+  - name: prod
+    serviceConnection: sc-orders-prod
+    storeName: appcs-orders-prod
+    resourceGroup: rg-orders-prod
+    webAppName: app-orders-prod
+
+variables:
+  # Replace with the project of your application. This playbook contains no application code.
+  appProject: src/Orders.Api/Orders.Api.csproj
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+- stage: Validate
+  jobs:
+  - job: Validate
+    steps:
+    - template: templates/validate.yml
+
+- stage: Build
+  dependsOn: Validate
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+  jobs:
+  - job: Configuration
+    steps:
+    - template: templates/build-configuration.yml
+      parameters:
+        appName: orders-api
+        environments: ${{ parameters.environments }}
+
+  - job: Application
+    steps:
+    - checkout: self
+      fetchDepth: 1
+
+    - pwsh: dotnet publish '$(appProject)' --configuration Release --output '$(Build.ArtifactStagingDirectory)/app'
+      displayName: Build the application
+
+    - publish: $(Build.ArtifactStagingDirectory)/app
+      artifact: app
+      displayName: Publish the application package
+
+# Without dependsOn, every stage depends on the one before it: dev, then test, then prod.
+- ${{ each environment in parameters.environments }}:
+  - stage: Deploy_${{ environment.name }}
+    displayName: Deploy to ${{ environment.name }}
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+    - template: templates/deploy-environment.yml
+      parameters:
+        appName: orders-api
+        environment: ${{ environment }}
+        healthCheckPath: /health

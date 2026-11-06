@@ -1,0 +1,17 @@
+# Runs the Pester tests and the offline validation of every app against every environment.
+# Needs no Azure access, so it is safe to run on every pull request.
+
+steps:
+- checkout: self
+  fetchDepth: 1
+
+- pwsh: Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+  displayName: Install Pester
+
+- pwsh: |
+    $result = Invoke-Pester -Path ./app-configuration/tests -Output Detailed -PassThru
+    if ($result.FailedCount -gt 0) { exit 1 }
+  displayName: Run tests
+
+- pwsh: ./app-configuration/Test-AppConfiguration.ps1
+  displayName: Validate configuration (offline)

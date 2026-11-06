@@ -1,0 +1,21 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "#{LogLevel}#"
+    }
+  },
+  "Orders": {
+    "PublicBaseUrl": "https://orders-#{EnvironmentName}#.example.com/",
+    "PageSize": 50,
+    "AllowGuestCheckout": true,
+    "RetryDelays": [ "00:00:01", "00:00:05", "00:00:30" ]
+  },
+  "ServiceBus": {
+    "FullyQualifiedNamespace": "sb-orders-#{EnvironmentName}#.servicebus.windows.net",
+    "QueueName": "orders"
+  },
+  "Payments": {
+    "BaseUrl": "#{PaymentsBaseUrl}#",
+    "TimeoutSeconds": "#{PaymentsTimeoutSeconds}#"
+  }
+}

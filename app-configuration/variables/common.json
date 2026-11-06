@@ -1,0 +1,8 @@
+{
+  "variables": {
+    "LogLevel": "Information",
+    "KeyVaultUri": "https://kv-orders-#{EnvironmentName}#.vault.azure.net",
+    "PaymentsBaseUrl": "https://payments-#{EnvironmentName}#.example.com/api/",
+    "PaymentsTimeoutSeconds": 30
+  }
+}

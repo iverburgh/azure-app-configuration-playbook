@@ -1,0 +1,33 @@
+# Resolves the configuration of one app for every environment and publishes it as artifacts:
+#
+#   appconfig-<environment>   the four files with every #{Token}# replaced, in a folder per app
+#   appconfig-scripts         the scripts, library and schemas that import and activate it
+#
+# Build-AppConfiguration.ps1 validates before it writes, so an unknown or empty token fails the
+# build here, long before any environment is touched.
+
+parameters:
+- name: appName
+  type: string
+- name: environments
+  type: object # list of objects with at least a 'name'
+
+steps:
+- checkout: self
+  fetchDepth: 1
+
+- ${{ each environment in parameters.environments }}:
+  - pwsh: >-
+      ./app-configuration/Build-AppConfiguration.ps1
+      -AppName '${{ parameters.appName }}'
+      -Environment '${{ environment.name }}'
+      -OutputPath '$(Build.ArtifactStagingDirectory)/appconfig-${{ environment.name }}'
+    displayName: Resolve configuration for ${{ environment.name }}
+
+  - publish: $(Build.ArtifactStagingDirectory)/appconfig-${{ environment.name }}
+    artifact: appconfig-${{ environment.name }}
+    displayName: Publish configuration for ${{ environment.name }}
+
+- publish: app-configuration
+  artifact: appconfig-scripts
+  displayName: Publish deployment scripts

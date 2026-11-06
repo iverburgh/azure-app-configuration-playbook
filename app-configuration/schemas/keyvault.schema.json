@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "keyvault.schema.json",
+  "title": "Key Vault references",
+  "description": "Nested settings whose leaves are Key Vault references of the form { \"uri\": \"https://<vault>.vault.azure.net/secrets/<name>\" }.   The URI may contain #{Token}# placeholders; its final form is checked after token replacement. Deeper levels are checked by the validation script, because PowerShell's Test-Json does not support recursive schemas.",
+    "type": "object",
+    "propertyNames": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^:]+$"
+    },
+    "additionalProperties": {
+      "type": "object",
+      "minProperties": 1
+    }
+  }

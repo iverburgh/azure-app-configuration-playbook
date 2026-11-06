@@ -1,0 +1,7 @@
+{
+  "variables": {
+    "EnvironmentName": "dev",
+    "LogLevel": "Debug",
+    "ExpressShippingPercentage": 100
+  }
+}
