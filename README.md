@@ -117,6 +117,8 @@ From the same monorepo, each on its own:
   build and deploy only the apps a change touches.
 - [Domain-Driven Design in .NET](https://github.com/iverburgh/ddd-dotnet-playbook) — bounded
   contexts, aggregates, domain events and the outbox in a working .NET solution.
+- [Entra ID app registrations as code](https://github.com/iverburgh/entra-app-registrations-as-code-playbook) —
+  app registrations and their certificates in Key Vault, which Key Vault references here point to.
 
 ## License
 
