@@ -105,6 +105,19 @@ pipelines/
 tools/                              leak check and link check for this repository
 ```
 
+## Related playbooks
+
+From the same monorepo, each on its own:
+
+- [Renovate on Azure DevOps](https://github.com/iverburgh/renovate-azure-devops-playbook) —
+  automated dependency updates.
+- [Copilot on Azure DevOps](https://github.com/iverburgh/copilot-azure-devops-playbook) —
+  instructions, skills and agents, including feature flag instructions built on this playbook.
+- [Path filters on Azure DevOps](https://github.com/iverburgh/azure-devops-path-filter-playbook) —
+  build and deploy only the apps a change touches.
+- [Domain-Driven Design in .NET](https://github.com/iverburgh/ddd-dotnet-playbook) — bounded
+  contexts, aggregates, domain events and the outbox in a working .NET solution.
+
 ## License
 
 [MIT](LICENSE)
