@@ -6,7 +6,9 @@
 .DESCRIPTION
     For each app folder and each environment file it checks JSON syntax, duplicate keys,
     the JSON schemas, token replacement (unknown, empty or malformed tokens), reserved keys,
-    key collisions, Key Vault reference URIs and feature flag filters. No Azure access needed.
+    key collisions, Key Vault reference URIs, feature flag filters, application parameters
+    (data types and ascending start dates) and, when the environment files list
+    'environmentMarkers', values that belong to another environment. No Azure access needed.
     Exits with code 1 when anything is wrong.
 
 .EXAMPLE

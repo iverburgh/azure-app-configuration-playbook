@@ -46,7 +46,7 @@ Undo the change.
 ./Build-AppConfiguration.ps1 -AppName orders-api -Environment dev -OutputPath ./out
 ```
 
-`./out/orders-api/` now holds the four files with every token replaced by the values from
+`./out/orders-api/` now holds the resolved files with every token replaced by the values from
 `variables/common.json` and `variables/dev.json`. This is what the pipeline publishes as an
 artifact. `out/` is git-ignored.
 

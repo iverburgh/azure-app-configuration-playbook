@@ -7,17 +7,20 @@ Set-StrictMode -Version Latest
 function Get-AppConfigurationConstants {
     @{
         Files                  = [ordered]@{
-            Settings            = 'AppConfiguration.json'
-            KeyVault            = 'AppConfiguration.KeyVault.json'
-            FeatureFlags        = 'AppConfiguration.FeatureFlags.json'
-            CircuitBreakerFlags = 'AppConfiguration.CircuitBreakerFlags.json'
+            Settings              = 'AppConfiguration.json'
+            KeyVault              = 'AppConfiguration.KeyVault.json'
+            FeatureFlags          = 'AppConfiguration.FeatureFlags.json'
+            CircuitBreakerFlags   = 'AppConfiguration.CircuitBreakerFlags.json'
+            # Optional: values that change at a planned moment, outside the deployment cycle.
+            ApplicationParameters = 'AppConfiguration.ApplicationParameters.json'
         }
         Schemas                = @{
-            Settings            = 'appconfiguration.schema.json'
-            KeyVault            = 'keyvault.schema.json'
-            FeatureFlags        = 'featureflags.schema.json'
-            CircuitBreakerFlags = 'featureflags.schema.json'
-            Variables           = 'variables.schema.json'
+            Settings              = 'appconfiguration.schema.json'
+            KeyVault              = 'keyvault.schema.json'
+            FeatureFlags          = 'featureflags.schema.json'
+            CircuitBreakerFlags   = 'featureflags.schema.json'
+            ApplicationParameters = 'applicationparameters.schema.json'
+            Variables             = 'variables.schema.json'
         }
         FlagLabels             = [ordered]@{
             FeatureFlags        = 'feature-flag'
@@ -27,6 +30,12 @@ function Get-AppConfigurationConstants {
         FeatureFlagContentType = 'application/vnd.microsoft.appconfig.ff+json;charset=utf-8'
         FeatureFlagKeyPrefix   = '.appconfig.featureflag/'
         SentinelName           = 'Sentinel'
+        ParameterLabel         = 'app-parameter'
+        ParameterSection       = 'Parameters'
+        ParameterSentinelName  = 'ParameterSentinel'
+        ParameterContentType   = 'application/json'
+        ParameterDataTypes     = @('String', 'Integer', 'Decimal', 'Percentage', 'TimeSpan', 'Email')
+        StartDatePattern       = '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})$'
         DeploymentTag          = 'deployment'
         LabelSettingName       = 'AppConfiguration__Label'
         WarmupPathSetting      = 'WEBSITE_SWAP_WARMUP_PING_PATH'
@@ -114,7 +123,7 @@ function ConvertTo-CanonicalValue {
         return $Value
     }
     if ($Value -is [System.Collections.IDictionary] -or (Test-IsJsonObject $Value)) {
-        $names = if ($Value -is [System.Collections.IDictionary]) { [string[]]@($Value.Keys) } else { [string[]]@($Value.PSObject.Properties.Name) }
+        $names = [string[]]@(if ($Value -is [System.Collections.IDictionary]) { $Value.Keys } else { foreach ($property in $Value.PSObject.Properties) { $property.Name } })
         [Array]::Sort($names, [StringComparer]::Ordinal)
         $result = [ordered]@{}
         foreach ($name in $names) {
@@ -165,6 +174,9 @@ function Assert-DeploymentLabel {
     }
     if (@($constants.FlagLabels.Values) -contains $Label) {
         throw "Label '$Label' is reserved for feature flags and cannot identify a deployment."
+    }
+    if ($Label -eq $constants.ParameterLabel) {
+        throw "Label '$Label' is reserved for application parameters and cannot identify a deployment."
     }
 }
 
@@ -375,7 +387,7 @@ function Get-DeploymentVariables {
 function Resolve-AppConfiguration {
     <#
     .SYNOPSIS
-        Reads the four files of one app and replaces all tokens. Throws on any token problem.
+        Reads the files of one app and replaces all tokens. Throws on any token problem.
     .PARAMETER Variables
         Resolved variables. Pass an empty dictionary to read files that must not contain tokens.
     #>
@@ -417,7 +429,7 @@ function Resolve-AppConfiguration {
 function Export-ResolvedAppConfiguration {
     <#
     .SYNOPSIS
-        Writes a resolved app to <Path>/<AppName>/ with the same four file names.
+        Writes a resolved app to <Path>/<AppName>/ with the same file names.
     #>
     param(
         [Parameter(Mandatory)] $Resolved,
@@ -700,13 +712,21 @@ function Test-ResolvedAppConfiguration {
 
     $constants = Get-AppConfigurationConstants
     $files = $constants.Files
+    $parameters = @(Get-ApplicationParameterDefinitions -Resolved $Resolved)
 
     foreach ($part in 'Settings', 'KeyVault') {
         foreach ($property in $Resolved.$part.PSObject.Properties) {
-            if ($property.Name -eq $constants.SentinelName) {
+            if ($property.Name -eq $constants.SentinelName -or $property.Name -eq $constants.ParameterSentinelName) {
                 "$($files[$part]): top-level key '$($property.Name)' is reserved for the change sentinel."
             }
+            elseif ($property.Name -eq $constants.ParameterSection -and $parameters.Count -gt 0) {
+                "$($files[$part]): top-level key '$($property.Name)' is reserved for the application parameters in $($files.ApplicationParameters)."
+            }
         }
+    }
+
+    foreach ($parameter in $parameters) {
+        Find-ApplicationParameterErrors -Name $parameter.Name -DataType $parameter.DataType -Values $parameter.Values -Source $files.ApplicationParameters
     }
 
     $seen = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -759,6 +779,211 @@ function Test-ResolvedAppConfiguration {
     }
 }
 
+function ConvertTo-StartDate {
+    <#
+    .SYNOPSIS
+        Parses an ISO 8601 start date with seconds and an explicit offset or 'Z'. Returns $null when invalid.
+    #>
+    param([AllowNull()] $Text)
+
+    # Before PowerShell 7.4 ConvertFrom-Json turns ISO dates into DateTime values.
+    if ($Text -is [DateTimeOffset]) {
+        return $Text
+    }
+    if ($Text -is [DateTime]) {
+        return [DateTimeOffset]$Text
+    }
+    if ($Text -isnot [string] -or $Text -cnotmatch (Get-AppConfigurationConstants).StartDatePattern) {
+        return $null
+    }
+    $date = [DateTimeOffset]::MinValue
+    if ([DateTimeOffset]::TryParse($Text, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$date)) {
+        return $date
+    }
+    return $null
+}
+
+function Test-ApplicationParameterValue {
+    <#
+    .SYNOPSIS
+        Returns a message when Value is not valid for DataType; returns nothing when it is.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $DataType,
+        [AllowNull()] $Value
+    )
+
+    if ($Value -isnot [string]) {
+        return 'must be a string'
+    }
+    $invariant = [System.Globalization.CultureInfo]::InvariantCulture
+    $number = [decimal]0
+    switch ($DataType) {
+        'String' {
+            return
+        }
+        'Integer' {
+            $integer = [long]0
+            if ($Value -cnotmatch '^-?[0-9]+$' -or -not [long]::TryParse($Value, [System.Globalization.NumberStyles]::AllowLeadingSign, $invariant, [ref]$integer)) {
+                return 'is not a whole number'
+            }
+        }
+        'Decimal' {
+            if ($Value -cnotmatch '^-?[0-9]+(\.[0-9]+)?$' -or -not [decimal]::TryParse($Value, [System.Globalization.NumberStyles]::Number, $invariant, [ref]$number)) {
+                return "is not a decimal number with '.' as separator"
+            }
+        }
+        'Percentage' {
+            if ($Value -cnotmatch '^[0-9]+(\.[0-9]+)?$' -or -not [decimal]::TryParse($Value, [System.Globalization.NumberStyles]::Number, $invariant, [ref]$number) -or $number -gt 100) {
+                return 'is not a percentage between 0 and 100'
+            }
+        }
+        'TimeSpan' {
+            $span = [TimeSpan]::Zero
+            if (-not [TimeSpan]::TryParseExact($Value, 'c', $invariant, [ref]$span)) {
+                return "is not a time span such as '00:05:00' or '1.00:00:00'"
+            }
+        }
+        'Email' {
+            if ($Value -cnotmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
+                return 'is not an e-mail address'
+            }
+        }
+        default {
+            return "has unknown data type '$DataType'"
+        }
+    }
+}
+
+function Get-ApplicationParameterDefinitions {
+    <#
+    .SYNOPSIS
+        Lists the application parameters of a resolved app as Name, DataType, Description and Values.
+    #>
+    param([Parameter(Mandatory)] $Resolved)
+
+    $parameters = Get-OptionalProperty -InputObject $Resolved -Name 'ApplicationParameters'
+    if (-not (Test-IsJsonObject $parameters)) {
+        return
+    }
+    foreach ($property in $parameters.PSObject.Properties) {
+        [pscustomobject]@{
+            Name        = $property.Name
+            DataType    = [string](Get-OptionalProperty -InputObject $property.Value -Name 'dataType' -Default '')
+            Description = [string](Get-OptionalProperty -InputObject $property.Value -Name 'description' -Default '')
+            Values      = @(Get-OptionalArray (Get-OptionalProperty -InputObject $property.Value -Name 'values'))
+        }
+    }
+}
+
+function Find-ApplicationParameterErrors {
+    <#
+    .SYNOPSIS
+        Checks the values of one parameter: valid start dates in ascending order and values that fit the data type.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Name,
+        [Parameter(Mandatory)] [string] $DataType,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Values,
+        [Parameter(Mandatory)] [string] $Source
+    )
+
+    if ($Values.Count -eq 0) {
+        "${Source}: parameter '$Name' needs at least one value."
+        return
+    }
+    $previous = $null
+    for ($index = 0; $index -lt $Values.Count; $index++) {
+        $entry = $Values[$index]
+        $startText = Get-OptionalProperty -InputObject $entry -Name 'startDate'
+        $start = ConvertTo-StartDate -Text $startText
+        if ($null -eq $start) {
+            "${Source}: parameter '$Name' value $index has start date '$startText'; use ISO 8601 with seconds and an offset, such as 2025-01-01T00:00:00+01:00."
+        }
+        elseif ($null -ne $previous -and $start -le $previous) {
+            "${Source}: parameter '$Name' value $index starts at '$startText', which is not later than the value before it."
+        }
+        if ($null -ne $start) {
+            $previous = $start
+        }
+        $value = Get-OptionalProperty -InputObject $entry -Name 'value'
+        $message = Test-ApplicationParameterValue -DataType $DataType -Value $value
+        if ($message) {
+            "${Source}: parameter '$Name' value $index ('$value') $message."
+        }
+    }
+}
+
+function Get-ResolvedValues {
+    <#
+    .SYNOPSIS
+        Lists every resolved value that ends up in the store as File, Key and Value.
+    #>
+    param([Parameter(Mandatory)] $Resolved)
+
+    $files = (Get-AppConfigurationConstants).Files
+    foreach ($setting in @(ConvertTo-FlatSettings -Node $Resolved.Settings)) {
+        [pscustomobject]@{ File = $files.Settings; Key = $setting.Key; Value = $setting.Value }
+    }
+    foreach ($reference in @(ConvertTo-FlatKeyVault -Node $Resolved.KeyVault)) {
+        if ($null -ne $reference.Uri) {
+            [pscustomobject]@{ File = $files.KeyVault; Key = $reference.Key; Value = $reference.Uri }
+        }
+    }
+    foreach ($parameter in @(Get-ApplicationParameterDefinitions -Resolved $Resolved)) {
+        for ($index = 0; $index -lt $parameter.Values.Count; $index++) {
+            $value = Get-OptionalProperty -InputObject $parameter.Values[$index] -Name 'value'
+            if ($value -is [string]) {
+                [pscustomobject]@{ File = $files.ApplicationParameters; Key = '{0}[{1}]' -f $parameter.Name, $index; Value = $value }
+            }
+        }
+    }
+}
+
+function Find-CrossEnvironmentValues {
+    <#
+    .SYNOPSIS
+        Reports resolved values that contain a marker of another environment, such as a test URL in prod.
+    .DESCRIPTION
+        Opt-in: an environment file may list 'environmentMarkers', text that only appears in
+        values of that environment. Matching is case-insensitive.
+    #>
+    param(
+        [Parameter(Mandatory)] $Resolved,
+        [Parameter(Mandatory)] [string] $VariablesPath,
+        [Parameter(Mandatory)] [string] $Environment
+    )
+
+    $markers = [System.Collections.Generic.List[object]]::new()
+    foreach ($file in @(Get-ChildItem -LiteralPath $VariablesPath -Filter '*.json' -File | Sort-Object BaseName)) {
+        if ($file.BaseName -eq 'common' -or $file.BaseName -eq $Environment) {
+            continue
+        }
+        try {
+            $document = Read-JsonFile -Path $file.FullName
+        }
+        catch {
+            # That environment's own validation reports the broken file.
+            continue
+        }
+        foreach ($marker in @(Get-OptionalArray (Get-OptionalProperty -InputObject $document -Name 'environmentMarkers'))) {
+            if ($marker -is [string] -and $marker.Length -gt 0) {
+                $markers.Add([pscustomobject]@{ Environment = $file.BaseName; Text = $marker })
+            }
+        }
+    }
+    if ($markers.Count -eq 0) {
+        return
+    }
+    foreach ($entry in @(Get-ResolvedValues -Resolved $Resolved)) {
+        foreach ($marker in $markers) {
+            if ($entry.Value.Contains($marker.Text, [StringComparison]::OrdinalIgnoreCase)) {
+                "$($entry.File): '$($entry.Key)' has value '$($entry.Value)', which contains '$($marker.Text)', a marker of environment '$($marker.Environment)'."
+            }
+        }
+    }
+}
+
 function Test-AppConfigurationSet {
     <#
     .SYNOPSIS
@@ -780,6 +1005,11 @@ function Test-AppConfigurationSet {
             }
         }
     }
+    $commonFile = Join-Path $VariablesPath 'common.json'
+    if ($errors.Count -eq 0 -and (Test-Path -LiteralPath $commonFile) -and
+        $null -ne (Get-OptionalProperty -InputObject (Read-JsonFile -Path $commonFile) -Name 'environmentMarkers')) {
+        $errors.Add("common.json: 'environmentMarkers' belongs in an environment file, not in common.json.")
+    }
     foreach ($message in @(Test-AppConfigurationSource -AppPath $AppPath -SchemaPath $SchemaPath)) {
         $errors.Add($message)
     }
@@ -797,6 +1027,7 @@ function Test-AppConfigurationSet {
         return
     }
     Test-ResolvedAppConfiguration -Resolved $resolved
+    Find-CrossEnvironmentValues -Resolved $resolved -VariablesPath $VariablesPath -Environment $Environment
 }
 
 function Get-AppConfigurationValidationResult {
@@ -868,7 +1099,7 @@ function New-ConfigurationItem {
 }
 
 function Get-ComparableItem {
-    param([Parameter(Mandatory)] $Item, [switch] $ParseValue)
+    param([Parameter(Mandatory)] $Item, [switch] $ParseValue, [switch] $IgnoreTags)
 
     $value = $Item.value
     if ($ParseValue) {
@@ -880,7 +1111,7 @@ function Get-ComparableItem {
         }
     }
     $tags = Get-OptionalProperty -InputObject $Item -Name 'tags'
-    if ($null -eq $tags) {
+    if ($null -eq $tags -or $IgnoreTags) {
         $tags = @{}
     }
     ConvertTo-CanonicalJson -InputObject ([ordered]@{
@@ -1033,6 +1264,110 @@ function Remove-StoreItem {
     Invoke-AzCli -Arguments $arguments | Out-Null
 }
 
+function ConvertTo-ParameterValue {
+    param(
+        [Parameter(Mandatory)] [string] $DataType,
+        [AllowNull()] [string] $Description,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Values
+    )
+    ConvertTo-Json -Depth 64 -Compress -InputObject ([ordered]@{
+            dataType    = $DataType
+            description = [string]$Description
+            values      = @($Values)
+        })
+}
+
+function Get-ApplicationParameterPlan {
+    <#
+    .SYNOPSIS
+        Works out the writes for the application parameters of one app.
+    .DESCRIPTION
+        Parameters live under '<app>:Parameters:<name>' with one fixed label, shared by both
+        slots, so they are not versioned per deployment. A parameter that already exists keeps
+        its values from the store (they are changed with Set-ApplicationParameter.ps1); only the
+        data type and description come from the file. Parameters are never deleted: the
+        previous version may still read them. The parameter sentinel is only created here.
+    .OUTPUTS
+        One object with Writes, SentinelWrite and Changes.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $StoreEndpoint,
+        [Parameter(Mandatory)] $Resolved,
+        [Parameter(Mandatory)] [string] $Label
+    )
+
+    $constants = Get-AppConfigurationConstants
+    $app = $Resolved.AppName
+    $prefix = '{0}:{1}:' -f $app, $constants.ParameterSection
+    $plan = [pscustomobject]@{
+        Writes        = [System.Collections.Generic.List[object]]::new()
+        SentinelWrite = $null
+        Changes       = [System.Collections.Generic.List[object]]::new()
+    }
+
+    $existing = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($item in @(Get-StoreItems -StoreEndpoint $StoreEndpoint -Key "$prefix*" -Label $constants.ParameterLabel)) {
+        $existing[$item.key] = $item
+    }
+
+    $parameters = @(Get-ApplicationParameterDefinitions -Resolved $Resolved)
+    $desiredKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($parameter in $parameters) {
+        $key = $prefix + $parameter.Name
+        [void]$desiredKeys.Add($key)
+        $values = $parameter.Values
+        $detail = 'values from the file'
+        $current = if ($existing.ContainsKey($key)) { $existing[$key] } else { $null }
+        if ($null -ne $current) {
+            try {
+                $stored = ConvertFrom-JsonText -Json ([string]$current.value)
+            }
+            catch {
+                $stored = $null
+            }
+            $storedValues = @(Get-OptionalArray (Get-OptionalProperty -InputObject $stored -Name 'values'))
+            if (-not (Test-IsJsonObject $stored) -or $storedValues.Count -eq 0) {
+                Write-Warning "Parameter '$key' has an unreadable value in the store; it is left as it is."
+                continue
+            }
+            if ([string](Get-OptionalProperty -InputObject $stored -Name 'dataType') -cne $parameter.DataType) {
+                foreach ($entry in $storedValues) {
+                    $storedValue = Get-OptionalProperty -InputObject $entry -Name 'value'
+                    $message = Test-ApplicationParameterValue -DataType $parameter.DataType -Value $storedValue
+                    if ($message) {
+                        throw "Parameter '$key' cannot change to data type $($parameter.DataType): value '$storedValue' in the store $message. Change the values in the store first, or use a new parameter name."
+                    }
+                }
+            }
+            $values = $storedValues
+            $detail = 'values kept from the store'
+        }
+
+        $value = ConvertTo-ParameterValue -DataType $parameter.DataType -Description $parameter.Description -Values $values
+        $item = New-ConfigurationItem -Key $key -Label $constants.ParameterLabel -Value $value -ContentType $constants.ParameterContentType -Deployment $Label
+        # Tags are ignored: a new deployment alone is no reason to rewrite a parameter.
+        if ($null -ne $current -and ((Get-ComparableItem -Item $current -ParseValue -IgnoreTags) -ceq (Get-ComparableItem -Item $item -ParseValue -IgnoreTags))) {
+            continue
+        }
+        $plan.Writes.Add($item)
+        $action = if ($null -eq $current) { 'Add' } else { 'Update' }
+        $plan.Changes.Add((New-ChangeRecord -Action $action -Target 'parameter' -Name $key -Label $constants.ParameterLabel -Detail $detail))
+    }
+
+    foreach ($key in @($existing.Keys | Where-Object { -not $desiredKeys.Contains($_) } | Sort-Object)) {
+        Write-Warning "Parameter '$key' is in the store but not in $($constants.Files.ApplicationParameters). It is kept, because the previous version may still read it; delete it by hand once no slot needs it."
+    }
+
+    if ($parameters.Count -gt 0) {
+        $sentinelKey = '{0}:{1}' -f $app, $constants.ParameterSentinelName
+        if (@(Get-StoreItems -StoreEndpoint $StoreEndpoint -Key $sentinelKey -Label $constants.ParameterLabel).Count -eq 0) {
+            $plan.SentinelWrite = New-ConfigurationItem -Key $sentinelKey -Label $constants.ParameterLabel -Value $Label -Deployment $Label
+            $plan.Changes.Add((New-ChangeRecord -Action 'Add' -Target 'parameter' -Name $sentinelKey -Label $constants.ParameterLabel))
+        }
+    }
+    $plan
+}
+
 function Invoke-ConfigurationImport {
     <#
     .SYNOPSIS
@@ -1041,6 +1376,7 @@ function Invoke-ConfigurationImport {
         Settings and Key Vault references are written under '<app>:' with the deployment
         label; keys that no longer exist are deleted from that label only. Feature flags
         and circuit breakers use fixed labels; their enabled state is kept from the store.
+        Application parameters use one fixed label and keep their values from the store.
         Writes only what differs, so a second run changes nothing.
     .OUTPUTS
         Change records (Action, Target, Name, Label, Detail).
@@ -1057,6 +1393,7 @@ function Invoke-ConfigurationImport {
     $constants = Get-AppConfigurationConstants
     $app = $Resolved.AppName
     $sentinelKey = '{0}:{1}' -f $app, $constants.SentinelName
+    $parameterPlan = Get-ApplicationParameterPlan -StoreEndpoint $StoreEndpoint -Resolved $Resolved -Label $Label
 
     $existing = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
     foreach ($item in @(Get-StoreItems -StoreEndpoint $StoreEndpoint -Key "${app}:*" -Label $Label)) {
@@ -1064,6 +1401,9 @@ function Invoke-ConfigurationImport {
     }
 
     $changes = [System.Collections.Generic.List[object]]::new()
+    foreach ($change in $parameterPlan.Changes) {
+        $changes.Add($change)
+    }
     $writes = [System.Collections.Generic.List[object]]::new()
     $sentinelWrite = $null
     $desiredKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -1134,6 +1474,13 @@ function Invoke-ConfigurationImport {
     }
 
     if (-not $DryRun) {
+        # Parameters first: they are shared by both slots and do not depend on the new set.
+        if ($parameterPlan.Writes.Count -gt 0) {
+            Write-StoreItems -StoreEndpoint $StoreEndpoint -Items $parameterPlan.Writes.ToArray()
+        }
+        if ($null -ne $parameterPlan.SentinelWrite) {
+            Write-StoreItems -StoreEndpoint $StoreEndpoint -Items @($parameterPlan.SentinelWrite)
+        }
         if ($writes.Count -gt 0) {
             Write-StoreItems -StoreEndpoint $StoreEndpoint -Items $writes.ToArray()
         }
@@ -1474,7 +1821,8 @@ function Invoke-ConfigurationCleanup {
     .DESCRIPTION
         Keeps the current label and the labels of the production and staging slots, so the
         rollback target always survives. Deletes all other labels of the app, unlabelled keys
-        under '<app>:', and flags whose deployment tag is not kept.
+        under '<app>:', and flags whose deployment tag is not kept. Application parameters are
+        never deleted.
     #>
     [CmdletBinding()]
     param(
@@ -1505,6 +1853,9 @@ function Invoke-ConfigurationCleanup {
     $deletes = [System.Collections.Generic.List[object]]::new()
     foreach ($item in @(Get-StoreItems -StoreEndpoint $StoreEndpoint -Key "${AppName}:*")) {
         $label = [string]$item.label
+        if ($label -ceq $constants.ParameterLabel) {
+            continue
+        }
         if ([string]::IsNullOrEmpty($label) -or -not $keep.Contains($label)) {
             $deletes.Add([pscustomobject]@{ Key = $item.key; Label = $label; Target = 'setting' })
         }
@@ -1523,6 +1874,139 @@ function Invoke-ConfigurationCleanup {
         }
         New-ChangeRecord -Action 'Delete' -Target $delete.Target -Name $delete.Key -Label $delete.Label
     }
+}
+
+#endregion
+
+#region Application parameters
+
+function Format-StartDate {
+    param([Parameter(Mandatory)] [DateTimeOffset] $Date)
+    $Date.ToString("yyyy-MM-dd'T'HH:mm:sszzz", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-StoreItemTags {
+    param([AllowNull()] $Item)
+    $tags = Get-OptionalProperty -InputObject $Item -Name 'tags'
+    if ($null -eq $tags) {
+        return @{}
+    }
+    return $tags
+}
+
+function Set-ApplicationParameterValue {
+    <#
+    .SYNOPSIS
+        Schedules a new value for one application parameter, from a moment in the future.
+    .DESCRIPTION
+        Appends { startDate, value, changedBy, changedAt } to the values of the parameter in the
+        store and then changes the parameter sentinel, so running apps reload the parameters.
+        Values that already took effect cannot change: the start date must be later than now
+        and not earlier than the last start date. The same value with the same start date
+        changes nothing; another value for a start date that is still in the future replaces
+        the planned value.
+    .OUTPUTS
+        Change records (Action, Target, Name, Label, Detail).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $StoreEndpoint,
+        [Parameter(Mandatory)] [string] $AppName,
+        [Parameter(Mandatory)] [string] $Name,
+        [Parameter(Mandatory)] [DateTimeOffset] $StartDate,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string] $Value,
+        [string] $ChangedBy,
+        [DateTimeOffset] $Now = [DateTimeOffset]::UtcNow,
+        [switch] $DryRun
+    )
+
+    $constants = Get-AppConfigurationConstants
+    $label = $constants.ParameterLabel
+    $key = '{0}:{1}:{2}' -f $AppName, $constants.ParameterSection, $Name
+    $found = @(Get-StoreItems -StoreEndpoint $StoreEndpoint -Key $key -Label $label)
+    if ($found.Count -eq 0) {
+        throw "Parameter '$key' does not exist. Add it to $($constants.Files.ApplicationParameters) and deploy the app first."
+    }
+    $item = $found[0]
+    try {
+        $stored = ConvertFrom-JsonText -Json ([string]$item.value)
+    }
+    catch {
+        $stored = $null
+    }
+    $dataType = [string](Get-OptionalProperty -InputObject $stored -Name 'dataType' -Default '')
+    $values = [System.Collections.Generic.List[object]]::new()
+    foreach ($entry in @(Get-OptionalArray (Get-OptionalProperty -InputObject $stored -Name 'values'))) {
+        $values.Add($entry)
+    }
+    $lastStart = $null
+    if ($values.Count -gt 0) {
+        $lastStart = ConvertTo-StartDate -Text (Get-OptionalProperty -InputObject $values[$values.Count - 1] -Name 'startDate')
+    }
+    if (-not (Test-IsJsonObject $stored) -or $null -eq $lastStart -or $constants.ParameterDataTypes -cnotcontains $dataType) {
+        throw "Parameter '$key' has an unreadable value in the store."
+    }
+
+    $message = Test-ApplicationParameterValue -DataType $dataType -Value $Value
+    if ($message) {
+        throw "Value '$Value' for parameter '$key' $message (data type $dataType)."
+    }
+    $lastValue = [string](Get-OptionalProperty -InputObject $values[$values.Count - 1] -Name 'value')
+    if ($StartDate -eq $lastStart -and $lastValue -ceq $Value) {
+        return
+    }
+    if ($StartDate -le $Now) {
+        throw "Start date $(Format-StartDate $StartDate) is not in the future; a value that already took effect cannot change."
+    }
+    if ($StartDate -lt $lastStart) {
+        throw "Start date $(Format-StartDate $StartDate) is earlier than the last planned start date $(Format-StartDate $lastStart)."
+    }
+
+    if (-not $ChangedBy) {
+        $account = Invoke-AzCli -Arguments @('account', 'show') -AllowFailure
+        $ChangedBy = [string](Get-OptionalProperty -InputObject (Get-OptionalProperty -InputObject $account -Name 'user') -Name 'name' -Default '')
+        if (-not $ChangedBy) {
+            throw 'Cannot tell who makes the change; pass -ChangedBy.'
+        }
+    }
+
+    $detail = 'from {0}: {1}' -f (Format-StartDate $StartDate), $Value
+    if ($StartDate -eq $lastStart) {
+        $values.RemoveAt($values.Count - 1)
+        $detail += " (replaces the planned value '$lastValue')"
+    }
+    $values.Add([ordered]@{
+            startDate = Format-StartDate $StartDate
+            value     = $Value
+            changedBy = $ChangedBy
+            changedAt = Format-StartDate $Now.ToUniversalTime()
+        })
+    $description = [string](Get-OptionalProperty -InputObject $stored -Name 'description' -Default '')
+    $update = [pscustomobject][ordered]@{
+        key         = $key
+        label       = $label
+        value       = ConvertTo-ParameterValue -DataType $dataType -Description $description -Values $values.ToArray()
+        contentType = $constants.ParameterContentType
+        tags        = Get-StoreItemTags -Item $item
+    }
+
+    $sentinelKey = '{0}:{1}' -f $AppName, $constants.ParameterSentinelName
+    $sentinel = @(Get-StoreItems -StoreEndpoint $StoreEndpoint -Key $sentinelKey -Label $label)
+    $sentinelUpdate = [pscustomobject][ordered]@{
+        key         = $sentinelKey
+        label       = $label
+        value       = [guid]::NewGuid().ToString('N')
+        contentType = $null
+        tags        = if ($sentinel.Count -gt 0) { Get-StoreItemTags -Item $sentinel[0] } else { @{} }
+    }
+
+    if (-not $DryRun) {
+        Write-StoreItems -StoreEndpoint $StoreEndpoint -Items @($update)
+        # The sentinel goes last, so a client that refreshes on it sees the new value.
+        Write-StoreItems -StoreEndpoint $StoreEndpoint -Items @($sentinelUpdate)
+    }
+    New-ChangeRecord -Action 'Update' -Target 'parameter' -Name $key -Label $label -Detail $detail
+    New-ChangeRecord -Action ($sentinel.Count -gt 0 ? 'Update' : 'Add') -Target 'parameter' -Name $sentinelKey -Label $label
 }
 
 #endregion

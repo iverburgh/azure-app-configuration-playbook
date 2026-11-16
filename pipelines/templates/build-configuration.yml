@@ -1,6 +1,6 @@
 # Resolves the configuration of one app for every environment and publishes it as artifacts:
 #
-#   appconfig-<environment>   the four files with every #{Token}# replaced, in a folder per app
+#   appconfig-<environment>   the resolved files with every #{Token}# replaced, in a folder per app
 #   appconfig-scripts         the scripts, library and schemas that import and activate it
 #
 # Build-AppConfiguration.ps1 validates before it writes, so an unknown or empty token fails the

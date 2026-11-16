@@ -94,6 +94,8 @@ production already reading the previous set.
 - **Feature flags and circuit breaker flags.** They have one definition per app, not one per
   deployment. A changed description or filter stays changed. Their enabled state was never part of
   the deployment.
+- **Application parameters.** Both slots read the same parameters; a planned value takes effect
+  on its date, whichever version is live. See [Application parameters](application-parameters.md).
 - **Secrets.** A Key Vault reference points at a secret; if the secret itself changed, the old
   reference reads the new value, unless the reference names a secret version.
 - **Anything the application changed**, such as a database schema.
@@ -129,6 +131,9 @@ and deletes:
 - every other key-value under `orders-api:`, including key-values without a label
 - every flag of the app (labels `feature-flag` and `circuit-breaker`) whose `deployment` tag is not
   one of the kept labels
+
+It never touches application parameters (label `app-parameter`): their history is the record of
+who planned what.
 
 It refuses to run when neither slot carries the label of this deployment: then the slots are not
 in the state it expects, and deleting would be a guess.

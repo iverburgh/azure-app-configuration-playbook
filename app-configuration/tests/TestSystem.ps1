@@ -105,10 +105,10 @@ function Get-TestSlot {
 }
 
 function Get-FakeLabels {
-    <# The distinct labels of the app's settings in the fake store, sorted. #>
+    <# The distinct deployment labels of the app's settings in the fake store, sorted. Application parameters are left out. #>
     param([string] $AppName = 'orders-api')
     @($global:Fake.Items |
-            Where-Object { $_.key.StartsWith("${AppName}:", [StringComparison]::Ordinal) } |
+            Where-Object { $_.key.StartsWith("${AppName}:", [StringComparison]::Ordinal) -and $_.label -cne 'app-parameter' } |
             ForEach-Object { if ($null -eq $_.label) { '<null>' } else { $_.label } } |
             Sort-Object -Unique)
 }

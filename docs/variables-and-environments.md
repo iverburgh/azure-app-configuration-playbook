@@ -1,6 +1,7 @@
 # Variables and environments
 
-The four files of an app are the same for every environment. What differs is filled in from
+The four files of an app (five, with [application parameters](application-parameters.md)) are
+the same for every environment. What differs is filled in from
 variable files, at build time, once per environment.
 
 ## Tokens
@@ -91,6 +92,31 @@ never reach a store.
    and lists every token that has no value there.
 3. Add the environment to the `environments` parameter in the pipeline, with its service
    connection, store, resource group and web app. See [CI/CD pipeline](ci-cd-pipeline.md).
+
+## Values of another environment
+
+A value that was copied from one environment file into another is valid JSON, fills every token
+and still points production at the test vault. To catch that, list in each environment file the
+fragments that only that environment's values contain:
+
+```jsonc
+// variables/prod.json
+{
+  "variables": { "EnvironmentName": "prod", "LogLevel": "Warning" },
+  "environmentMarkers": [ "-prod." ]
+}
+```
+
+The validator then checks every resolved value of every app in an environment (settings, Key Vault
+URIs and parameter values) against the markers of the *other* environments, ignoring case:
+
+```text
+AppConfiguration.KeyVault.json: 'Payments:ApiKey' has value 'https://kv-orders-test.vault.azure.net/secrets/payments-api-key', which contains '-test.', a marker of environment 'test'.
+```
+
+Choose markers that cannot appear by accident: `-test.` matches `kv-orders-test.vault.azure.net`
+but not `latest`. `environmentMarkers` is optional, and not allowed in `common.json`, which belongs
+to every environment.
 
 ## What does not belong in a variable
 

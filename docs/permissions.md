@@ -9,7 +9,7 @@ slots, and the app, which only reads. Neither needs an access key.
 | --- | --- | --- | --- |
 | Pipeline (service connection) | App Configuration Data Owner | the store | import, delete obsolete sets, check that a set exists |
 | Pipeline (service connection) | Website Contributor | the web app | read and set app settings, start and stop the staging slot, swap, deploy |
-| App (managed identity of the web app) | App Configuration Data Reader | the store | load its configuration set and flags |
+| App (managed identity of the web app) | App Configuration Data Reader | the store | load its configuration set, flags and parameters |
 | App (managed identity of the web app) | Key Vault Secrets User | the key vault | read the secrets its Key Vault references point at |
 
 One pipeline identity and one store per environment keeps a run for dev away from prod.
@@ -65,10 +65,46 @@ The App Configuration provider reads Key Vault secrets itself, with the credenti
 | Who | Role |
 | --- | --- |
 | Operations, to switch flags and circuit breakers | App Configuration Data Owner on the store |
+| Whoever plans [application parameters](application-parameters.md) | App Configuration Data Owner on the store, or a pipeline that does it for them |
 | Developers, to read a development store | App Configuration Data Reader |
 
 Changing a setting by hand in the store has no lasting effect: the next deployment imports a new
-set without it. Change the files instead.
+set without it. Change the files instead. See [Operating the store](operating-the-store.md).
+
+In production, make these assignments *eligible* rather than permanent, with
+[Privileged Identity Management](https://learn.microsoft.com/entra/id-governance/privileged-identity-management/pim-resource-roles-assign-roles):
+a person activates the lightest role that does the job (Data Reader to look, Data Owner to switch),
+for a short period, with a reason that is logged. Nobody holds write access to production keys
+by default.
+
+## Control plane and data plane
+
+Azure separates managing the store from reading and writing its keys:
+
+| Plane | Roles | Allows |
+| --- | --- | --- |
+| Control plane | Owner, Contributor, App Configuration Contributor | create and delete the store, change its settings, network rules and access keys |
+| Data plane | App Configuration Data Owner, App Configuration Data Reader | read, write and delete key-values and flags |
+
+With access keys disabled, **Owner or Contributor alone gives no access to keys**: the portal's
+Configuration explorer shows an authorization error. That surprises people who expect Owner to
+allow everything. Assign a data role as well, and keep in mind that a control-plane role can
+re-enable access keys, which is why Azure Policy should keep them disabled.
+
+## Network access
+
+When the store has public network access disabled and a
+[private endpoint](https://learn.microsoft.com/azure/azure-app-configuration/concept-private-endpoint),
+every data-plane call must come from a network that can reach that endpoint and resolve its private
+DNS name:
+
+- **The pipeline** runs on an agent inside, or peered with, that network. A Microsoft-hosted agent
+  cannot import.
+- **The portal** calls the data plane from your browser, so Configuration explorer and Feature
+  manager work only from a machine with a path to the endpoint, such as over VPN.
+- **The app** reaches it through virtual network integration of the web app.
+
+The validator and the tests need no network at all.
 
 ## Access keys and propagation
 

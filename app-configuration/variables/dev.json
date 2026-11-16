@@ -3,5 +3,6 @@
     "EnvironmentName": "dev",
     "LogLevel": "Debug",
     "ExpressShippingPercentage": 100
-  }
+  },
+  "environmentMarkers": [ "-dev." ]
 }

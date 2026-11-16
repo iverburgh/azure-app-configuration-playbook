@@ -1,0 +1,29 @@
+#!/bin/sh
+# Sample pre-commit hook: runs the offline validator when a staged change touches the
+# configuration, so a broken token or duplicate key never reaches the pipeline.
+#
+# Enable it once per clone:   git config core.hooksPath .githooks
+# Skip it for one commit:     git commit --no-verify
+#
+# It validates the working tree, not only the staged content; the pipeline validates again.
+
+changed=$(git diff --cached --name-only -- \
+    'app-configuration/apps/' \
+    'app-configuration/variables/' \
+    'app-configuration/schemas/' \
+    'app-configuration/lib/')
+
+if [ -z "$changed" ]; then
+    exit 0
+fi
+
+if ! command -v pwsh >/dev/null 2>&1; then
+    echo "pre-commit: pwsh (PowerShell 7.2+) not found; skipping the App Configuration validation." >&2
+    exit 0
+fi
+
+echo "pre-commit: validating App Configuration files..."
+if ! pwsh -NoProfile -NonInteractive -File app-configuration/Test-AppConfiguration.ps1; then
+    echo "pre-commit: fix the errors above, or commit with --no-verify to skip this check." >&2
+    exit 1
+fi

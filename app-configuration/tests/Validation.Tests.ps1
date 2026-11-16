@@ -137,6 +137,47 @@ Describe 'Other rules' {
     }
 }
 
+Describe 'Values of another environment' {
+    BeforeAll {
+        function Get-MarkerErrors {
+            param([string] $Name, [hashtable] $Variables, [hashtable] $Files = @{})
+            $root = Join-Path $TestDrive $Name
+            $variablesPath = New-TestVariables -Root $root -Files $Variables
+            $app = New-TestApp -Root $root -Files $Files
+            @(Get-ValidationErrors -AppPath $app -VariablesPath $variablesPath)
+        }
+    }
+
+    It 'rejects a test value that contains the marker of prod' {
+        Get-MarkerErrors 'prod-url' @{ 'test.json' = '{ "variables": { "EnvironmentName": "test", "ExpressShippingPercentage": 50, "PaymentsBaseUrl": "https://payments-prod.example.com/api/" }, "environmentMarkers": [ "-test." ] }' } |
+            Should -Match "'Payments:BaseUrl' has value 'https://payments-prod.example.com/api/', which contains '-prod.', a marker of environment 'prod'"
+    }
+
+    It 'matches markers case-insensitively and checks Key Vault references' {
+        Get-MarkerErrors 'case' @{ 'test.json' = '{ "variables": { "EnvironmentName": "test", "ExpressShippingPercentage": 50, "KeyVaultUri": "https://KV-ORDERS-PROD.vault.azure.net" } }' } |
+            Should -Match 'AppConfiguration.KeyVault.json: .*a marker of environment .prod.'
+    }
+
+    It 'checks parameter values' {
+        $parameters = '{ "SupportEmail": { "dataType": "Email", "values": [ { "startDate": "2024-01-01T00:00:00Z", "value": "support@orders-dev.example.com" } ] } }'
+        Get-MarkerErrors 'parameter' @{} @{ 'AppConfiguration.ApplicationParameters.json' = $parameters } |
+            Should -Match "AppConfiguration.ApplicationParameters.json: 'SupportEmail\[0\]' .*environment 'dev'"
+    }
+
+    It 'checks nothing when no environment has markers' {
+        Get-MarkerErrors 'no-markers' @{
+            'dev.json'  = '{ "variables": { "EnvironmentName": "dev", "ExpressShippingPercentage": 100 } }'
+            'test.json' = '{ "variables": { "EnvironmentName": "test", "ExpressShippingPercentage": 50, "PaymentsBaseUrl": "https://payments-prod.example.com/api/" } }'
+            'prod.json' = '{ "variables": { "EnvironmentName": "prod", "ExpressShippingPercentage": 10 } }'
+        } | Should -BeNullOrEmpty
+    }
+
+    It 'rejects markers in common.json' {
+        Get-MarkerErrors 'common' @{ 'common.json' = '{ "variables": { "LogLevel": "Information", "KeyVaultUri": "https://kv-orders-#{EnvironmentName}#.vault.azure.net", "PaymentsBaseUrl": "https://payments-#{EnvironmentName}#.example.com/api/", "PaymentsTimeoutSeconds": 30, "FreeShippingThreshold": "50.00" }, "environmentMarkers": [ "x" ] }' } |
+            Should -Match 'common.json'
+    }
+}
+
 Describe 'Test-AppConfiguration.ps1' {
     It 'exits with 0 on the example' {
         $output = & pwsh -NoProfile -File (Join-Path $PlaybookRoot 'Test-AppConfiguration.ps1') 2>&1

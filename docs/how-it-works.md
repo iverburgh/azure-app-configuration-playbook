@@ -15,7 +15,7 @@ flowchart LR
 
 ## 1. Four files per app, with tokens
 
-Every app has a folder under `app-configuration/apps/` with four files:
+Every app has a folder under `app-configuration/apps/` with four files, and an optional fifth:
 
 | File | Becomes in the store |
 | --- | --- |
@@ -23,21 +23,24 @@ Every app has a folder under `app-configuration/apps/` with four files:
 | `AppConfiguration.KeyVault.json` | Key Vault references, key `<app>:<path>`, label = the deployment |
 | `AppConfiguration.FeatureFlags.json` | feature flags `<app>.<Name>`, label `feature-flag` |
 | `AppConfiguration.CircuitBreakerFlags.json` | feature flags `<app>.<Name>`, label `circuit-breaker` |
+| `AppConfiguration.ApplicationParameters.json` (optional) | parameters `<app>:Parameters:<Name>`, label `app-parameter` |
 
 A value that differs per environment is a token, `#{VariableName}#`, filled from
-`app-configuration/variables/`. See [The four files](the-four-files.md) and
-[Variables and environments](variables-and-environments.md).
+`app-configuration/variables/`. See [The four files](the-four-files.md),
+[Variables and environments](variables-and-environments.md) and
+[Application parameters](application-parameters.md).
 
 ## 2. Resolve and validate, offline
 
 `Test-AppConfiguration.ps1` resolves every app against every environment and checks the result:
 JSON syntax and duplicate keys, the schemas, tokens that are unknown or unterminated, Key Vault
-URIs, flag names and filters, and keys that collide once the files are flattened. It needs no Azure
-access, so it runs on every pull request.
+URIs, flag names and filters, parameter data types and start dates, keys that collide once the
+files are flattened, and values that belong to another environment. It needs no Azure access, so
+it runs on every pull request, and as a pre-commit hook if you like.
 
 ## 3. One artifact per environment
 
-`Build-AppConfiguration.ps1` writes the four files of one app for one environment, every token
+`Build-AppConfiguration.ps1` writes the files of one app for one environment, every token
 replaced. The pipeline does this once per environment in its Build stage and publishes each result
 as an artifact (`appconfig-dev`, `appconfig-test`, ...). Later stages deploy that artifact; they do
 not resolve again. What was validated is what gets deployed.
@@ -61,6 +64,7 @@ set is complete, and every later step refuses a label without one.
 
 Flags are different: they live under a fixed label, are shared by every set, and keep the
 enabled state they have in the store. See [The four files](the-four-files.md#feature-flags).
+Application parameters too: one fixed label, values kept from the store.
 
 ## 5. The staging slot points at the new set
 
@@ -91,6 +95,7 @@ neither slot points at. See [Deployment and rollback](deployment-and-rollback.md
 | `app-configuration/Switch-ConfigurationSet.ps1` | 6 |
 | `app-configuration/Undo-ConfigurationSet.ps1` | 6, on failure |
 | `app-configuration/Remove-ObsoleteConfigurationSets.ps1` | 6, on success |
+| `app-configuration/Set-ApplicationParameter.ps1` | any time: plan a parameter value |
 
 All of them load `app-configuration/lib/AppConfiguration.ps1`, and every call to Azure goes through
 one function in it, `Invoke-AzCli`. The tests replace that function with an in-memory store and web

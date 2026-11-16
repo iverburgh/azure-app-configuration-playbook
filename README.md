@@ -1,7 +1,7 @@
 # Azure App Configuration as code
 
 Keep the configuration of your application in the repository, next to its code, in four JSON
-files. Put what differs per environment in a variables file. The pipeline resolves it, imports it
+files (five with application parameters). Put what differs per environment in a variables file. The pipeline resolves it, imports it
 into Azure App Configuration as a set labelled with the build number, and swaps that set live
 together with the application. When the deployment fails, the application and its complete
 configuration go back to the previous version, in one swap. (The very first deployment to a web app
@@ -38,11 +38,24 @@ With the configuration in code:
 | Settings, nested, flattened to `<app>:<path>`         | Values for `#{Token}#` placeholders      |
 | Key Vault references (`{ "uri": ... }`)               | Defaults in `common.json`, overrides per environment |
 | Feature flags, with filters such as a percentage      |                                          |
-| Circuit breakers: flags that are on unless switched off |                                        |
+| Circuit breakers: flags that are on unless switched off | Markers that catch a value copied from another environment |
+| Application parameters: values planned per start date (optional) |                               |
 
 It calls Azure through the Azure CLI (`az appconfig`, `az webapp`), so it runs wherever you are
 signed in with `az login`: on your machine, or in a pipeline with a federated service connection.
 The application runs on Azure App Service with a staging slot.
+
+### What it does not cover
+
+- Creating the store, the web app, the slot or the role assignments: that is infrastructure as
+  code (Bicep, Terraform). [Permissions](docs/permissions.md) lists what to assign.
+- Apps on containers or Kubernetes. The labelled sets work the same; the slot swap does not exist
+  there, so activation and rollback need another mechanism.
+- Importing a common set shared by every app; see [Shared configuration](docs/shared-configuration.md)
+  for why and for the alternative.
+- Clients other than .NET. The store format is standard; only the examples are .NET.
+- App Service Key Vault references (`@Microsoft.KeyVault(...)` in app settings). This playbook
+  resolves secrets through App Configuration instead.
 
 ## Quick start
 
@@ -75,10 +88,13 @@ Start with [Getting started](docs/getting-started.md).
 | [How it works](docs/how-it-works.md)                              | Follow a value from variables via the artifact to a labelled set |
 | [The four files](docs/the-four-files.md)                          | Look up the rules for settings, Key Vault references and flags |
 | [Variables and environments](docs/variables-and-environments.md)  | Make a value differ per environment                          |
+| [Application parameters](docs/application-parameters.md)          | Plan a value to change on a date, without a deployment       |
+| [Shared configuration](docs/shared-configuration.md)              | Give several apps the same value                             |
 | [CI/CD pipeline](docs/ci-cd-pipeline.md)                          | Understand the stages and what each step checks              |
 | [Deployment and rollback](docs/deployment-and-rollback.md)        | See how a set is tied to a deployment, rolled back and cleaned up |
 | [Reading configuration in your app](docs/reading-configuration-in-your-app.md) | Load and refresh the active set in a .NET app   |
 | [Permissions](docs/permissions.md)                                | Grant the pipeline and the apps the minimal roles            |
+| [Operating the store](docs/operating-the-store.md)                | Switch a flag, find the live set, fix a value in an emergency |
 | [Applying it to your solution](docs/applying-to-your-solution.md) | Introduce this in an existing solution, step by step         |
 | [Pitfalls](docs/pitfalls.md)                                      | Avoid the mistakes that cost an afternoon                    |
 
@@ -86,7 +102,7 @@ Start with [Getting started](docs/getting-started.md).
 
 ```text
 app-configuration/
-  apps/<app>/                       the four files of each app
+  apps/<app>/                       the four files of each app, plus optional application parameters
   variables/common.json             defaults for every environment
   variables/<environment>.json      values per environment
   schemas/                          JSON schemas, for validation and editor completion
@@ -97,11 +113,13 @@ app-configuration/
   Switch-ConfigurationSet.ps1       swap staging into production
   Undo-ConfigurationSet.ps1         swap back to the previous set
   Remove-ObsoleteConfigurationSets.ps1  delete sets that are neither live nor the rollback target
+  Set-ApplicationParameter.ps1      plan a new value of an application parameter
   lib/                              the implementation; AzureCli.ps1 is the only part that talks to Azure
   tests/                            Pester tests against an in-memory fake store and web app
 pipelines/
   orders-api.yml                    validate, build, deploy per environment with rollback
   templates/                        the reusable steps
+.githooks/pre-commit                optional hook that validates before a commit
 tools/                              leak check and link check for this repository
 ```
 
@@ -119,6 +137,8 @@ From the same monorepo, each on its own:
   contexts, aggregates, domain events and the outbox in a working .NET solution.
 - [Entra ID app registrations as code](https://github.com/iverburgh/entra-app-registrations-as-code-playbook) —
   app registrations and their certificates in Key Vault, which Key Vault references here point to.
+- [Circuit breakers on Azure Functions](https://github.com/iverburgh/azure-functions-circuit-breaker-playbook) —
+  a shared circuit breaker that stops queue consumers and scheduled jobs by flipping feature flags.
 
 ## License
 

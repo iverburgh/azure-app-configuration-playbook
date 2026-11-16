@@ -19,6 +19,23 @@ so operators can switch it without a deployment. To switch a flag in every envir
 the store, or remove it from the file and add it under a new name. See
 [The four files](the-four-files.md#the-store-owns-the-enabled-state).
 
+## Application parameters are not rolled back either
+
+Parameters have one fixed label, shared by both slots. A rollback leaves them as they are, and a
+value planned for a date takes effect on that date, whichever version is live. Changing the values
+of an existing parameter in the file does nothing: like `enabled` for a flag, they only apply when
+the parameter is created. Plan a new value with `Set-ApplicationParameter.ps1`. See
+[Application parameters](application-parameters.md).
+
+## Renaming a fixed label
+
+The flag labels `feature-flag` and `circuit-breaker` and the parameter label `app-parameter` are in
+both the scripts and every app's `Program.cs`. Renaming one in the scripts makes the next import
+create every flag again under the new label, with the default enabled state, while running apps
+still read the old label. If you must rename, do it in steps: first let the apps select both
+labels (a later `Select` wins for the same key), then import under the new label and copy the
+enabled states, then remove the old label from the apps, and only then delete the old flags.
+
 ## Changes made by hand in the store do not last
 
 Every deployment imports a complete set under a new label. A setting changed by hand under the
@@ -78,6 +95,21 @@ intended: the new version never becomes healthy in staging and the pipeline does
 
 `Select("orders-api:*", label)` takes one label. `*` and `,` are not supported in the label filter
 of `Select`. The app reads exactly one set: the one in `AppConfiguration__Label`.
+
+## Trigger settings of Azure Functions
+
+`%QueueName%` in a trigger attribute, and the `Connection` name, are resolved by the Functions host
+from the app settings of the Function App, not from App Configuration loaded in `Program.cs`. The
+function fails to index or listens to the wrong queue. Put those values in app settings as App
+Configuration references. See
+[Reading configuration in your app](reading-configuration-in-your-app.md#azure-functions).
+
+## A value copied from another environment
+
+A URL or vault copied from `test.json` into `prod.json` passes every syntax check and points
+production at test. List the host fragments of each environment as `environmentMarkers`, and the
+validator fails on a value that contains the marker of another environment. See
+[Variables and environments](variables-and-environments.md#values-of-another-environment).
 
 ## Sticky App Configuration references stay behind on a swap
 

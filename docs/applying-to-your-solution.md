@@ -103,4 +103,5 @@ configuration after the store would override the store.
 
 Add a folder under `apps/` and a short pipeline per app. Several apps can share one store per
 environment: every key carries the app prefix, and the cleanup of one app never touches the keys
-or flags of another.
+or flags of another. For values that several apps need, see
+[Shared configuration](shared-configuration.md).

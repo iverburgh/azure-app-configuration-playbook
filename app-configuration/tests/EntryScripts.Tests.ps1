@@ -33,9 +33,10 @@ BeforeAll {
 }
 
 Describe 'Build-AppConfiguration.ps1' {
-    It 'writes the four resolved files' {
+    It 'writes the five resolved files' {
         $path = Build-TestApp -Environment 'prod'
         @(Get-ChildItem -LiteralPath $path -File | ForEach-Object Name | Sort-Object) | Should -Be @(
+            'AppConfiguration.ApplicationParameters.json'
             'AppConfiguration.CircuitBreakerFlags.json'
             'AppConfiguration.FeatureFlags.json'
             'AppConfiguration.json'
@@ -82,7 +83,7 @@ Describe 'Import-AppConfiguration.ps1' {
     }
 
     It 'imports the resolved files' {
-        @(Invoke-EntryScript 'Import-AppConfiguration.ps1' @{ StoreEndpoint = $TestStore; Path = $Resolved; Label = 'build-1' }).Count | Should -Be 18
+        @(Invoke-EntryScript 'Import-AppConfiguration.ps1' @{ StoreEndpoint = $TestStore; Path = $Resolved; Label = 'build-1' }).Count | Should -Be 22
         (Get-FakeItem -Key 'orders-api:Payments:BaseUrl' -Label 'build-1').value | Should -BeExactly 'https://payments-test.example.com/api/'
     }
 

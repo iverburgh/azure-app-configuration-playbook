@@ -14,6 +14,15 @@
       "additionalProperties": {
         "type": [ "string", "number", "boolean" ]
       }
+    },
+    "environmentMarkers": {
+      "description": "Only in <environment>.json. Text that only appears in values of this environment, such as '-prod.'. The validator fails when a resolved value of another environment contains it.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     }
   },
   "required": [ "variables" ],

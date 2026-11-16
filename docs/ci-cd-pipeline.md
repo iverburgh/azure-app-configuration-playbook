@@ -43,7 +43,7 @@ The Build stage publishes:
 
 | Artifact | Contents |
 | --- | --- |
-| `appconfig-<environment>` | `<app>/` with the four resolved files, one artifact per environment |
+| `appconfig-<environment>` | `<app>/` with the resolved files, one artifact per environment |
 | `appconfig-scripts` | the `app-configuration` folder: scripts, library and schemas |
 | `app` | the application package |
 
@@ -134,6 +134,42 @@ after Validate; the Build and Deploy stages have the condition
 
 Add your application's source folder to the trigger paths (`src/*` is commented out in the
 example).
+
+## Before the commit: a pre-commit hook
+
+The pipeline catches every mistake, but only after a push. `.githooks/pre-commit` runs the
+validator when a staged change touches `app-configuration/apps/`, `variables/`, `schemas/` or
+`lib/`, and blocks the commit when it fails. Enable it once per clone:
+
+```console
+git config core.hooksPath .githooks
+```
+
+`git commit --no-verify` skips it. Keep a hook like this fast and limited to what changed: a hook
+that takes long, or runs on every commit, gets skipped. It is a convenience, not a gate; the
+Validate stage stays the gate. `.gitattributes` keeps the hook's line endings LF, because `sh`
+fails on CRLF.
+
+## Validating only what changed
+
+The validator checks every app against every environment, which takes seconds for a handful of
+apps. With many apps, a pull request can validate only what it touches:
+
+| Changed | Validate |
+| --- | --- |
+| `apps/<app>/` | `./Test-AppConfiguration.ps1 -AppName <app>` |
+| `variables/<environment>.json` | `./Test-AppConfiguration.ps1 -Environment <environment>` |
+| `variables/common.json`, `schemas/`, `lib/` | everything |
+
+Validate everything on `main` regardless, so a gap in this mapping cannot hide a broken app for
+long.
+
+## PowerShell version
+
+The scripts need PowerShell 7.2 or later (`#Requires -Version 7.2`). The Azure CLI task runs them
+with `scriptType: pscore`, which is PowerShell 7 on every hosted agent. Windows PowerShell 5.1 does
+not work: the scripts use `System.Text.Json` and the ternary operator. On a self-hosted agent,
+install PowerShell 7 first.
 
 ## A second app
 

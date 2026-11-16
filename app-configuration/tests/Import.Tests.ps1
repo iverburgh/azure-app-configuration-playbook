@@ -183,8 +183,9 @@ Describe 'A dry run' {
         $script:Changes = Invoke-TestImport -Label 'build-1' -DryRun
     }
 
-    It 'reports the changes' {
-        $Changes.Count | Should -Be 18
+    It 'reports the changes, including three parameters and the parameter sentinel' {
+        $Changes.Count | Should -Be 22
+        @($Changes | Where-Object Target -EQ 'parameter').Count | Should -Be 4
     }
 
     It 'writes nothing' {
@@ -213,7 +214,7 @@ Describe 'The deployment label' {
         { Invoke-TestImport -Label $_ } | Should -Throw '*not valid*'
     }
 
-    It 'rejects the flag label <_>' -ForEach @('feature-flag', 'circuit-breaker') {
+    It 'rejects the fixed label <_>' -ForEach @('feature-flag', 'circuit-breaker', 'app-parameter') {
         { Invoke-TestImport -Label $_ } | Should -Throw '*reserved*'
     }
 }

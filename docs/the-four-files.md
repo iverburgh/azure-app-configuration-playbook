@@ -11,7 +11,10 @@ several apps can share one store without clashing.
 | `AppConfiguration.FeatureFlags.json` | no | feature flags, off unless switched on |
 | `AppConfiguration.CircuitBreakerFlags.json` | no | circuit breaker flags, on unless switched off |
 
-All four are JSON with a schema in `app-configuration/schemas/`. Some rules hold for every file:
+An optional fifth file, `AppConfiguration.ApplicationParameters.json`, holds business values that
+change on a date without a deployment; see [Application parameters](application-parameters.md).
+
+All files are JSON with a schema in `app-configuration/schemas/`. Some rules hold for every file:
 
 - The file must be valid JSON. A key that appears twice in the same object, or twice with only a
   difference in case, is an error. (`ConvertFrom-Json` would silently keep the last one; the
@@ -53,6 +56,7 @@ Rules:
   case-insensitive, so `Orders.PageSize` and `orders.pagesize` would overwrite each other.
 - The top-level key `Sentinel` is reserved. The import writes `<app>:Sentinel` itself, as the last
   key of every set. See [How it works](how-it-works.md#4-import-under-a-label-that-identifies-the-deployment).
+  `ParameterSentinel` is reserved too, and `Parameters` when the app has application parameters.
 
 Each value is one key-value in the store. Keep secrets out of this file; that is what the Key Vault
 file is for.
@@ -155,3 +159,29 @@ background job, so operations can turn it off during an incident without a deplo
 The code checks it like any feature flag and skips the call when it is off. A separate label keeps
 the two kinds apart in the portal and lets an app load them separately; see
 [Reading configuration in your app](reading-configuration-in-your-app.md#feature-flags-and-circuit-breakers).
+
+## Where to place a flag
+
+A flag is only as useful as the place where the code checks it. Lessons from switching features
+on, and off again, in production:
+
+- **Check it where the behaviour leaves the system**: before the message is published, the e-mail
+  is sent or the record becomes visible to another system. A flag checked deep inside the
+  processing still lets half of the new behaviour out when it is off.
+- **Check it once per unit of work**, and pass the result on. Two checks of the same flag in one
+  request can see different values when the flag changes in between.
+- **Have the plumbing in place before the feature goes live**: the flag in the file, the constant
+  in the code, the check, and a test with the flag on and off. Adding a flag during an incident is
+  a deployment, which is what the flag should have saved you.
+- **Look for places that are hard to flag before you start**, such as generated code, database
+  migrations or a contract that other systems already consume. Those changes cannot be switched
+  off, so they must be compatible with both states.
+- **Remove the flag once the feature is settled**: first the check in the code, then, in a later
+  deployment, the flag from the file. The other way round, the code finds no flag and sees it as
+  off.
+
+## Application parameters
+
+`AppConfiguration.ApplicationParameters.json` is optional and different from the other four: its
+values change in the store, on a planned date, without a deployment, and are not part of a
+configuration set. Everything about it is in [Application parameters](application-parameters.md).
