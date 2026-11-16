@@ -159,6 +159,8 @@ From the same monorepo, each on its own:
   complete, abandon or dead-letter: one policy for what happens to a message when its handler fails.
 - [Azure SQL disaster recovery](https://github.com/iverburgh/azure-sql-disaster-recovery-playbook) —
   a guided point-in-time restore: pause processing, restore, swap, check and resume.
+- [Azure DevOps environments as code](https://github.com/iverburgh/azure-devops-environments-as-code-playbook) —
+  the environments, approvals and checks the deployment stages here run against, kept in git.
 
 ## License
 
