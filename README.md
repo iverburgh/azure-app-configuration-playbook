@@ -152,6 +152,13 @@ From the same monorepo, each on its own:
 - [OpenTelemetry observability in .NET](https://github.com/iverburgh/dotnet-opentelemetry-observability-playbook) —
   traces, metrics and logs in one trace across HTTP, queues and an outbox, with sampling and log levels
   set from configuration like this.
+- [Azure SQL database as code](https://github.com/iverburgh/azure-sql-database-as-code-playbook) —
+  schema, migrations and seed data as SQL projects, with per-environment seeds next to these
+  per-environment settings.
+- [Service Bus settlement in Azure Functions](https://github.com/iverburgh/azure-functions-service-bus-settlement-playbook) —
+  complete, abandon or dead-letter: one policy for what happens to a message when its handler fails.
+- [Azure SQL disaster recovery](https://github.com/iverburgh/azure-sql-disaster-recovery-playbook) —
+  a guided point-in-time restore: pause processing, restore, swap, check and resume.
 
 ## License
 
