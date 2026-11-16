@@ -139,6 +139,12 @@ From the same monorepo, each on its own:
   app registrations and their certificates in Key Vault, which Key Vault references here point to.
 - [Circuit breakers on Azure Functions](https://github.com/iverburgh/azure-functions-circuit-breaker-playbook) —
   a shared circuit breaker that stops queue consumers and scheduled jobs by flipping feature flags.
+- [HTTP resilience in .NET](https://github.com/iverburgh/dotnet-http-resilience-playbook) —
+  retries, timeouts and outbound throttling for `HttpClient`, tuned per dependency from settings like
+  the ones here.
+- [OpenTelemetry observability in .NET](https://github.com/iverburgh/dotnet-opentelemetry-observability-playbook) —
+  traces, metrics and logs in one trace across HTTP, queues and an outbox, with sampling and log levels
+  set from configuration like this.
 
 ## License
 
