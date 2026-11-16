@@ -26,3 +26,10 @@ applyTo: 'app-configuration/**, pipelines/**'
 - After every change run `./app-configuration/Test-AppConfiguration.ps1` and
   `Invoke-Pester ./app-configuration/tests`. Never call the Azure CLI directly from
   `lib/AppConfiguration.ps1`; go through `Invoke-AzCli` in `lib/AzureCli.ps1`.
+- Never edit a file that starts with `# AUTO-GENERATED`, such as `pipelines/variables/<pipeline>/<environment>.yml`.
+  Change `app-configuration/variables/` or `pipelines/<pipeline>.variables.json` and run
+  `./app-configuration/New-PipelineVariables.ps1`; commit the regenerated files with the change.
+  `New-PipelineVariables.ps1 -Check` must pass.
+- In pipeline YAML, read environment values as `$(Name)` from the generated variable template; do
+  not add per-environment values to the YAML. A variable that refers to another uses `#{Name}#`,
+  never `$(Name)`.

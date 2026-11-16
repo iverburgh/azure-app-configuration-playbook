@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pipelinevariables.schema.json",
+  "title": "Pipeline variables",
+  "description": "Optional file pipelines/<pipeline>.variables.json. Tells New-PipelineVariables.ps1 which apps the pipeline deploys, which values differ for this pipeline only, and which variables it needs that a scan of its YAML cannot find.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "apps": {
+      "description": "App folders under app-configuration/apps/ whose #{Token}# values the generated files show. Default: the app with the same name as the pipeline, when it exists.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,62}$"
+      },
+      "uniqueItems": true
+    },
+    "overrides": {
+      "description": "Values for this pipeline only. 'common' applies to every environment, '<environment>' to one and wins over 'common'. Both win over app-configuration/variables. An environment without a variables file is ignored with a warning.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9-]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$"
+        },
+        "additionalProperties": {
+          "type": [ "string", "number", "boolean" ]
+        }
+      }
+    },
+    "extraKeys": {
+      "description": "Variables to include although the scan does not find them. A name that an environment does not define is written with an empty value. '*' includes every variable of the environment.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(\\*|[A-Za-z][A-Za-z0-9_.-]*)$"
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

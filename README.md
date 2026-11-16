@@ -37,7 +37,7 @@ With the configuration in code:
 | ----------------------------------------------------- | ---------------------------------------- |
 | Settings, nested, flattened to `<app>:<path>`         | Values for `#{Token}#` placeholders      |
 | Key Vault references (`{ "uri": ... }`)               | Defaults in `common.json`, overrides per environment |
-| Feature flags, with filters such as a percentage      |                                          |
+| Feature flags, with filters such as a percentage      | Generated pipeline variables: per pipeline only what it uses |
 | Circuit breakers: flags that are on unless switched off | Markers that catch a value copied from another environment |
 | Application parameters: values planned per start date (optional) |                               |
 
@@ -76,6 +76,9 @@ az login
 
 # Import
 ./Import-AppConfiguration.ps1 -StoreEndpoint https://<store>.azconfig.io -Path ./out/orders-api -Label local.1
+
+# After changing a variable or a pipeline: regenerate the pipeline variables
+./New-PipelineVariables.ps1
 ```
 
 Start with [Getting started](docs/getting-started.md).
@@ -91,6 +94,7 @@ Start with [Getting started](docs/getting-started.md).
 | [Application parameters](docs/application-parameters.md)          | Plan a value to change on a date, without a deployment       |
 | [Shared configuration](docs/shared-configuration.md)              | Give several apps the same value                             |
 | [CI/CD pipeline](docs/ci-cd-pipeline.md)                          | Understand the stages and what each step checks              |
+| [Generated pipeline variables](docs/generated-pipeline-variables.md) | Give each pipeline only the variables it uses, from the same source |
 | [Deployment and rollback](docs/deployment-and-rollback.md)        | See how a set is tied to a deployment, rolled back and cleaned up |
 | [Reading configuration in your app](docs/reading-configuration-in-your-app.md) | Load and refresh the active set in a .NET app   |
 | [Permissions](docs/permissions.md)                                | Grant the pipeline and the apps the minimal roles            |
@@ -114,12 +118,15 @@ app-configuration/
   Undo-ConfigurationSet.ps1         swap back to the previous set
   Remove-ObsoleteConfigurationSets.ps1  delete sets that are neither live nor the rollback target
   Set-ApplicationParameter.ps1      plan a new value of an application parameter
+  New-PipelineVariables.ps1         generate the variables each pipeline uses, per environment (-Check for CI)
   lib/                              the implementation; AzureCli.ps1 is the only part that talks to Azure
   tests/                            Pester tests against an in-memory fake store and web app
 pipelines/
   orders-api.yml                    validate, build, deploy per environment with rollback
+  orders-api.variables.json         optional: overrides and extra keys for the generated variables
+  variables/<pipeline>/<env>.yml    generated variable templates; never edit by hand
   templates/                        the reusable steps
-.githooks/pre-commit                optional hook that validates before a commit
+.githooks/pre-commit                optional hook that validates and regenerates before a commit
 tools/                              leak check and link check for this repository
 ```
 

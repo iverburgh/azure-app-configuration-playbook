@@ -96,6 +96,7 @@ neither slot points at. See [Deployment and rollback](deployment-and-rollback.md
 | `app-configuration/Undo-ConfigurationSet.ps1` | 6, on failure |
 | `app-configuration/Remove-ObsoleteConfigurationSets.ps1` | 6, on success |
 | `app-configuration/Set-ApplicationParameter.ps1` | any time: plan a parameter value |
+| `app-configuration/New-PipelineVariables.ps1` | before the pipeline: the variables each pipeline uses, per environment; see [Generated pipeline variables](generated-pipeline-variables.md) |
 
 All of them load `app-configuration/lib/AppConfiguration.ps1`, and every call to Azure goes through
 one function in it, `Invoke-AzCli`. The tests replace that function with an in-memory store and web

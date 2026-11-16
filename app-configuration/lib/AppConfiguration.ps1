@@ -21,6 +21,7 @@ function Get-AppConfigurationConstants {
             CircuitBreakerFlags   = 'featureflags.schema.json'
             ApplicationParameters = 'applicationparameters.schema.json'
             Variables             = 'variables.schema.json'
+            PipelineVariables     = 'pipelinevariables.schema.json'
         }
         FlagLabels             = [ordered]@{
             FeatureFlags        = 'feature-flag'
@@ -332,13 +333,19 @@ function Get-DeploymentVariables {
     <#
     .SYNOPSIS
         Reads common.json and <Environment>.json and returns the resolved variables.
+    .PARAMETER Overrides
+        Optional extra layers, applied in order after the environment file and before references
+        are resolved. Each is an object with 'Source' (for messages) and 'Values' (an object or
+        dictionary of name to value). The pipeline variables generator uses this for the
+        overrides of one pipeline.
     .OUTPUTS
         System.Collections.Generic.Dictionary[string, string] (case-sensitive names).
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $VariablesPath,
-        [Parameter(Mandatory)] [string] $Environment
+        [Parameter(Mandatory)] [string] $Environment,
+        [object[]] $Overrides = @()
     )
 
     $constants = Get-AppConfigurationConstants
@@ -369,6 +376,21 @@ function Get-DeploymentVariables {
             }
             catch {
                 throw "Variable '$($property.Name)' in '${file}': $($_.Exception.Message)"
+            }
+        }
+    }
+    foreach ($layer in @(Get-OptionalArray $Overrides)) {
+        $values = $layer.Values
+        $names = @(if ($values -is [System.Collections.IDictionary]) { $values.Keys } else { foreach ($property in $values.PSObject.Properties) { $property.Name } })
+        foreach ($name in $names) {
+            if ($name -cnotmatch $constants.VariableNamePattern) {
+                throw "Variable name '$name' in $($layer.Source) is not valid."
+            }
+            try {
+                $raw[$name] = ConvertTo-TokenString -Value (Get-OptionalProperty -InputObject $values -Name $name)
+            }
+            catch {
+                throw "Variable '$name' in $($layer.Source): $($_.Exception.Message)"
             }
         }
     }

@@ -143,3 +143,26 @@ value, points the app at another set on its next run. Let infrastructure code se
 The label is the build number of the pipeline, unique within that pipeline. Two pipelines that
 deploy the same app to the same store can produce the same label, and the second import would
 overwrite the set the first one deployed. Deploy each app from one pipeline.
+
+## Editing a generated pipeline variables file
+
+`pipelines/variables/<pipeline>/<environment>.yml` starts with `# AUTO-GENERATED`. A hand edit is
+lost on the next run, and until then the drift check in CI fails. Change
+`app-configuration/variables/` or `pipelines/<pipeline>.variables.json` and run
+`New-PipelineVariables.ps1`. Resolve a merge conflict in a generated file the same way: take
+either side and regenerate. See [Generated pipeline variables](generated-pipeline-variables.md).
+
+## A pipeline variable the scan cannot see
+
+The generator only includes the variables a pipeline refers to in its YAML, its local templates or
+the tokens of its apps. A name built at run time, used in a template from another repository or
+only inside a script file is missing from the generated file, and the step gets an empty value or
+the literal `$(Name)`. Add such names to `extraKeys` in `pipelines/<pipeline>.variables.json`.
+
+## Different output from different machines
+
+A generator that writes other bytes depending on the PowerShell edition, the culture or the line
+endings of the checkout makes the drift check fail for some people only. The generator sorts
+ordinally, formats numbers culture-invariantly, writes LF without BOM and compares ignoring line
+endings. Keep it that way when you change it; see
+[Deterministic output](generated-pipeline-variables.md#deterministic-output).

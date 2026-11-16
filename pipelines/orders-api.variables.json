@@ -1,0 +1,9 @@
+{
+  "$schema": "../app-configuration/schemas/pipelinevariables.schema.json",
+  "apps": [ "orders-api" ],
+  "overrides": {
+    "common": {
+      "WebAppName": "app-orders-#{EnvironmentName}#"
+    }
+  }
+}

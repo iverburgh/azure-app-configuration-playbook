@@ -36,22 +36,15 @@ parameters:
 - name: environments
   displayName: Environments, deployed in this order
   type: object
+  # The service connection stays here: Azure DevOps must know it when it compiles the pipeline.
+  # Everything else per environment comes from the generated variable templates.
   default:
   - name: dev
     serviceConnection: sc-orders-dev
-    storeName: appcs-orders-dev
-    resourceGroup: rg-orders-dev
-    webAppName: app-orders-dev
   - name: test
     serviceConnection: sc-orders-test
-    storeName: appcs-orders-test
-    resourceGroup: rg-orders-test
-    webAppName: app-orders-test
   - name: prod
     serviceConnection: sc-orders-prod
-    storeName: appcs-orders-prod
-    resourceGroup: rg-orders-prod
-    webAppName: app-orders-prod
 
 variables:
   # Replace with the project of your application. This playbook contains no application code.
@@ -91,13 +84,22 @@ stages:
       displayName: Publish the application package
 
 # Without dependsOn, every stage depends on the one before it: dev, then test, then prod.
+# Each stage loads the variables generated for this pipeline and environment
+# (app-configuration/New-PipelineVariables.ps1, docs/generated-pipeline-variables.md).
 - ${{ each environment in parameters.environments }}:
   - stage: Deploy_${{ environment.name }}
     displayName: Deploy to ${{ environment.name }}
     condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+    - template: variables/orders-api/${{ environment.name }}.yml
     jobs:
     - template: templates/deploy-environment.yml
       parameters:
         appName: orders-api
-        environment: ${{ environment }}
+        environment:
+          name: ${{ environment.name }}
+          serviceConnection: ${{ environment.serviceConnection }}
+          storeName: $(AppConfigurationStoreName)
+          resourceGroup: $(ResourceGroupName)
+          webAppName: $(WebAppName)
         healthCheckPath: /health

@@ -16,7 +16,7 @@ flowchart LR
 
 | Stage | Runs on | What it does | What it checks |
 | --- | --- | --- | --- |
-| Validate | every run, pull requests included | Pester tests, `Test-AppConfiguration.ps1` | the scripts behave; every app is valid for every environment |
+| Validate | every run, pull requests included | Pester tests, `Test-AppConfiguration.ps1`, `New-PipelineVariables.ps1 -Check` | the scripts behave; every app is valid for every environment; the generated pipeline variables are up to date |
 | Build | not on pull requests | resolves the configuration per environment into an artifact, publishes the scripts, builds the application | every token has a value in that environment |
 | `Deploy_<environment>` | not on pull requests, after approval | imports, deploys, swaps, smoke tests; rolls back on failure | see below |
 
@@ -89,6 +89,13 @@ Parameters of the template:
 | `appType` | `webAppLinux` | `webApp` for a Windows web app |
 | `stopStagingWhenDone` | `true` | stop the staging slot after the deployment, so the previous version does not keep running (and processing messages) next to production |
 
+The pipeline builds the `environment` object per stage. `name` and `serviceConnection` come from
+its `environments` parameter, because Azure DevOps needs them while it compiles the pipeline. The
+store, resource group and web app are `$(AppConfigurationStoreName)`, `$(ResourceGroupName)` and
+`$(WebAppName)`, from the generated variable template the stage loads
+(`pipelines/variables/orders-api/<environment>.yml`). See
+[Generated pipeline variables](generated-pipeline-variables.md).
+
 ## Environments and approvals
 
 Every deployment job targets an Azure DevOps
@@ -139,7 +146,10 @@ example).
 
 The pipeline catches every mistake, but only after a push. `.githooks/pre-commit` runs the
 validator when a staged change touches `app-configuration/apps/`, `variables/`, `schemas/` or
-`lib/`, and blocks the commit when it fails. Enable it once per clone:
+`lib/`, and blocks the commit when it fails. Then it regenerates the pipeline variables of the
+pipelines the staged change affects, and stops the commit when a generated file changed, so you
+can review and stage it (see [Before the commit](generated-pipeline-variables.md#before-the-commit)).
+Enable it once per clone:
 
 ```console
 git config core.hooksPath .githooks
@@ -173,12 +183,16 @@ install PowerShell 7 first.
 
 ## A second app
 
-Copy `pipelines/orders-api.yml`, change `appName`, `appProject`, the trigger paths and the
-environment list. The templates stay as they are.
+Copy `pipelines/orders-api.yml`, change `appName`, `appProject`, the trigger paths, the
+environment list and the path of the variables template. Add `pipelines/<pipeline>.variables.json`
+when the pipeline needs its own values (a different web app name, say), run
+`./app-configuration/New-PipelineVariables.ps1` and commit the generated files. The templates stay
+as they are.
 
 ## GitHub Actions
 
 The workflow in `.github/workflows/ci.yml` is the CI of this repository: tests on Ubuntu and
-Windows, the validator, a leak check and a link check. It does not deploy. The scripts do not
+Windows, the validator, the drift check of the generated pipeline variables, a leak check and a
+link check. It does not deploy. The scripts do not
 depend on Azure DevOps; to deploy from GitHub Actions, sign in with `azure/login` using
 OpenID Connect and run the same scripts in the same order.

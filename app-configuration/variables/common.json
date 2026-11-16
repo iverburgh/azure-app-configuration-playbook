@@ -4,6 +4,8 @@
     "KeyVaultUri": "https://kv-orders-#{EnvironmentName}#.vault.azure.net",
     "PaymentsBaseUrl": "https://payments-#{EnvironmentName}#.example.com/api/",
     "PaymentsTimeoutSeconds": 30,
-    "FreeShippingThreshold": "50.00"
+    "FreeShippingThreshold": "50.00",
+    "AppConfigurationStoreName": "appcs-orders-#{EnvironmentName}#",
+    "ResourceGroupName": "rg-orders-#{EnvironmentName}#"
   }
 }

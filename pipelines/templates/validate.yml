@@ -1,4 +1,5 @@
-# Runs the Pester tests and the offline validation of every app against every environment.
+# Runs the Pester tests, the offline validation of every app against every environment and the
+# drift check of the generated pipeline variables.
 # Needs no Azure access, so it is safe to run on every pull request.
 
 steps:
@@ -15,3 +16,6 @@ steps:
 
 - pwsh: ./app-configuration/Test-AppConfiguration.ps1
   displayName: Validate configuration (offline)
+
+- pwsh: ./app-configuration/New-PipelineVariables.ps1 -Check
+  displayName: Check generated pipeline variables

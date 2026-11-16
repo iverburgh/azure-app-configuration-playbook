@@ -40,6 +40,10 @@ jobs:
         shell: pwsh
         run: ./app-configuration/Test-AppConfiguration.ps1
 
+      - name: Check that the generated pipeline variables are up to date
+        shell: pwsh
+        run: ./app-configuration/New-PipelineVariables.ps1 -Check
+
   leak-check:
     name: No internal references
     runs-on: ubuntu-latest

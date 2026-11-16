@@ -1,2 +1,4 @@
 # Git hooks run under sh, which fails on CRLF line endings.
 .githooks/* text eol=lf
+# Generated pipeline variables: the generator writes LF; keep them LF on every platform.
+pipelines/variables/** text eol=lf

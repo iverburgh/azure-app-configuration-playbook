@@ -10,6 +10,7 @@ Copy into your repository:
 - from `app-configuration/`: the entry scripts (`*.ps1`), `lib/` and `schemas/`. Leave out
   `apps/orders-api/`, `variables/` (you write your own) and `tests/`.
 - `pipelines/templates/`, without the *Install Pester* and *Run tests* steps in `validate.yml`
+- `.githooks/pre-commit` and `.gitattributes`, if you want the hook
 - `.github/instructions/app-configuration.instructions.md`, if you use GitHub Copilot
 
 The tests run the scripts against the example app and its variables, so they belong with the
@@ -69,9 +70,15 @@ Test it locally against a development store: import a set with
    identity App Configuration Data Owner on the store and Website Contributor on the web app.
 2. Create the Azure DevOps environments `<app>-<environment>`, with an approval check where needed.
 3. Copy `pipelines/orders-api.yml` to `pipelines/<app>.yml`. Change `appName`, `appProject`, the
-   trigger paths and the environment list. If your build already produces the application package,
-   keep only the configuration parts and publish the package as artifact `app`.
-4. Add the pipeline as build validation on `main`, with a path filter for `app-configuration/`.
+   trigger paths, the environment list and the path of the variables template. If your build
+   already produces the application package, keep only the configuration parts and publish the
+   package as artifact `app`.
+4. Put the store, resource group and web app of each environment in `variables/` (or, when they
+   differ per app, in `pipelines/<app>.variables.json`), run
+   `./app-configuration/New-PipelineVariables.ps1` and commit the files it writes under
+   `pipelines/variables/<app>/`. See [Generated pipeline variables](generated-pipeline-variables.md).
+5. Add the pipeline as build validation on `main`, with a path filter for `app-configuration/` and
+   `pipelines/`.
 
 See [CI/CD pipeline](ci-cd-pipeline.md).
 
@@ -97,7 +104,8 @@ and check that production returns to the previous label.
 Once the app reads everything from the store in every environment, remove the old app settings,
 pipeline variables and variable groups that held the same values. Keeping both makes it unclear
 which one is in effect: the store overrides `appsettings.json`, but environment variables added to
-configuration after the store would override the store.
+configuration after the store would override the store. Values the pipeline itself still needs move
+to `variables/` and reach it through the generated variable templates.
 
 ## 8. The next apps
 

@@ -33,6 +33,8 @@ variables/
   prod.json
 ```
 
+The same files also feed the pipeline variables; see [Values for the pipeline](#values-for-the-pipeline).
+
 Each has the same shape:
 
 ```json
@@ -91,7 +93,18 @@ never reach a store.
 2. Run `./Test-AppConfiguration.ps1`. It now checks every app against the new environment as well
    and lists every token that has no value there.
 3. Add the environment to the `environments` parameter in the pipeline, with its service
-   connection, store, resource group and web app. See [CI/CD pipeline](ci-cd-pipeline.md).
+   connection. See [CI/CD pipeline](ci-cd-pipeline.md).
+4. Run `./New-PipelineVariables.ps1` and commit the new `pipelines/variables/<pipeline>/<environment>.yml`
+   files. The store, resource group and web app of the environment come from these files; see
+   [Generated pipeline variables](generated-pipeline-variables.md).
+
+## Values for the pipeline
+
+The pipeline reads the same variables. `New-PipelineVariables.ps1` writes, per pipeline and
+environment, a variable template with only the variables that pipeline uses, resolved from these
+files plus the overrides in `pipelines/<pipeline>.variables.json`. So a value such as the name of
+the store is written once, here, and not again in the YAML. Never edit the generated files; see
+[Generated pipeline variables](generated-pipeline-variables.md).
 
 ## Values of another environment
 
